@@ -42,7 +42,7 @@ app.post("/api/daily", (req,res) => {
 
 app.get("/api/referral/:id", (req,res) => {
   const bot = process.env.BOT_USERNAME || "Coinhammer_bot";
-  res.json({link:`https://t.me/${bot}/app?startapp=${encodeURIComponent(req.params.id)}`});
+  res.json({link:`https://t.me/${bot}/coinhammer?startapp=${encodeURIComponent(req.params.id)}`});
 });
 
 app.post("/api/withdraw", (req,res) => {
