@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CoinHammer</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{--bg:#0c1016;--card:#151b24;--border:#27303d;--text:#f5f7fa;--muted:#929dad;--gold:#e8b84d}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:620px;margin:auto;padding:18px}.hero{background:linear-gradient(145deg,#19212c,#10151c);border:1px solid var(--border);border-radius:24px;padding:24px;text-align:center}
+.brand{font-weight:900;letter-spacing:2px;color:var(--gold)}.balance{font-size:44px;font-weight:900;margin-top:10px}.muted{color:var(--muted);font-size:13px}
+button{border:0;border-radius:14px;padding:14px 16px;font-weight:800;cursor:pointer}.earn{width:100%;margin-top:18px;background:var(--gold);color:#17130a;font-size:16px}.earn:disabled{opacity:.55}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}.card{background:var(--card);border:1px solid var(--border);color:var(--text);text-align:left;min-height:105px}.icon{font-size:24px}.title{margin-top:8px}.notice{text-align:center;min-height:22px;margin:14px 0;color:var(--muted);font-size:13px}
+.panel{display:none;background:var(--card);border:1px solid var(--border);border-radius:18px;padding:18px;margin-top:14px}.panel.show{display:block}
+input{width:100%;padding:13px;border-radius:12px;border:1px solid var(--border);background:#0e141c;color:var(--text);margin:10px 0}
+</style>
+</head>
+<body><main>
+<section class="hero">
+<div class="brand">◆ COINHAMMER</div>
+<div class="balance" id="balance">0</div><div class="muted">COINS</div>
+<button class="earn" id="earn">🚀 START EARNING</button>
+<div class="muted" id="timer">Ready</div>
+</section>
+<div class="grid">
+<button class="card" id="daily"><div class="icon">🎁</div><div class="title">Daily Bonus</div><div class="muted">Claim once per day</div></button>
+<button class="card" id="tasks"><div class="icon">🎯</div><div class="title">Tasks</div><div class="muted">Complete & earn</div></button>
+<button class="card" id="invite"><div class="icon">👥</div><div class="title">Invite Friends</div><div class="muted">Referral rewards</div></button>
+<button class="card" id="leader"><div class="icon">🏆</div><div class="title">Leaderboard</div><div class="muted">Top earners</div></button>
+</div>
+<section class="panel" id="wallet"><h3>💰 Wallet</h3><div class="muted">Withdrawal requests are pending admin approval in this starter.</div><input id="amount" type="number" min="1" placeholder="Coins to withdraw"><button id="withdraw">Request Withdrawal</button></section>
+<section class="panel" id="output"></section>
+<div class="notice" id="notice" aria-live="polite"></div>
+</main>
+<script>
+const tg=window.Telegram?.WebApp;
+if(tg){tg.ready();tg.expand();}
+const api=(location.protocol.startsWith("http")&&location.port==="3000")?"": "http://localhost:3000";
+const tgUser=tg?.initDataUnsafe?.user;
+const id=String(tgUser?.id||"demo-user");
+const name=tgUser?.username||tgUser?.first_name||"DemoUser";
+const $=x=>document.getElementById(x);
+let balance=0;
+async function load(){try{const r=await fetch(api+"/api/user/"+encodeURIComponent(id));const u=await r.json();balance=u.balance;render()}catch(e){balance=1250;render();$("notice").textContent="Demo mode — connect the backend for real data."}}
+function render(){$("balance").textContent=balance.toLocaleString("en-IN")}
+async function post(path,body){const r=await fetch(api+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw new Error(j.error||"Request failed");return j}
+$("earn").onclick=async()=>{ $("earn").disabled=true;let s=10;$("timer").textContent="Earning for "+s+"s";const t=setInterval(async()=>{s--;$("timer").textContent="Earning for "+s+"s";if(s<=0){clearInterval(t);try{const j=await post("/api/earn",{id});balance=j.balance;render();$("timer").textContent="+100 coins";}catch(e){$("notice").textContent=e.message}$("earn").disabled=false}},1000)}
+$("daily").onclick=async()=>{try{const j=await post("/api/daily",{id});balance=j.balance;render();$("notice").textContent="+250 daily bonus"}catch(e){$("notice").textContent=e.message}}
+$("invite").onclick=async()=>{try{const j=await (await fetch(api+"/api/referral/"+encodeURIComponent(id))).json();$("output").classList.add("show");$("output").innerHTML="<h3>👥 Your Referral Link</h3><div class='muted'>"+j.link+"</div>"}catch(e){$("notice").textContent=e.message}}
+$("tasks").onclick=()=>{$("notice").textContent="Tasks module: add verified Telegram/social tasks in Phase 2."}
+$("leader").onclick=async()=>{try{const list=await (await fetch(api+"/api/leaderboard")).json();$("output").classList.add("show");$("output").innerHTML="<h3>🏆 Leaderboard</h3>"+list.map((u,i)=>"<div>"+(i+1)+". "+(u.username||"User")+" — "+u.balance.toLocaleString()+"</div>").join("")}catch(e){$("notice").textContent=e.message}}
+$("withdraw").onclick=async()=>{try{const amount=Number($("amount").value);const j=await post("/api/withdraw",{id,amount});balance=j.balance;render();$("notice").textContent="Withdrawal request submitted"}catch(e){$("notice").textContent=e.message}}
+load();
+</script>
+</body></html>
