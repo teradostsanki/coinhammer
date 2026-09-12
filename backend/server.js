@@ -127,9 +127,10 @@ app.post("/api/referral/claim", async (req,res) => {
 });
 app.post("/api/tasks/complete", async (req,res) => {
   const id = String(req.body.id || "");
+  const taskId = String(req.body.taskId || "");
 
-  if (!id) {
-    return res.status(400).json({error:"Missing user id"});
+  if (!id || !taskId) {
+    return res.status(400).json({error:"Missing user id or task id"});
   }
 
   const client = await pool.connect();
@@ -145,6 +146,22 @@ app.post("/api/tasks/complete", async (req,res) => {
     if (userResult.rows.length === 0) {
       await client.query("ROLLBACK");
       return res.status(404).json({error:"User not found"});
+    }
+
+    const taskResult = await client.query(
+      `INSERT INTO user_tasks (user_id, task_id)
+       VALUES ($1, $2)
+       ON CONFLICT (user_id, task_id) DO NOTHING
+       RETURNING id`,
+      [id, taskId]
+    );
+
+    if (taskResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        error:"Task already completed",
+        duplicate:true
+      });
     }
 
     const updatedUser = await client.query(
@@ -182,9 +199,10 @@ app.post("/api/tasks/complete", async (req,res) => {
     await client.query("COMMIT");
 
     res.json({
-      ok: true,
-      tasks_completed: user.tasks_completed,
-      referral_reward: referralReward
+      ok:true,
+      task_id:taskId,
+      tasks_completed:user.tasks_completed,
+      referral_reward:referralReward
     });
 
   } catch (error) {
