@@ -36,7 +36,7 @@ input{width:100%;padding:13px;border-radius:12px;border:1px solid var(--border);
 <script>
 const tg=window.Telegram?.WebApp;
 if(tg){tg.ready();tg.expand();}
-const api=(location.protocol.startsWith("http")&&location.port==="3000")?"": "http://localhost:3000";
+const api="https://coinhammer.onrender.com";
 const tgUser=tg?.initDataUnsafe?.user;
 const id=String(tgUser?.id||"demo-user");
 const name=tgUser?.username||tgUser?.first_name||"DemoUser";
