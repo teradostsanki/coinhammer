@@ -249,7 +249,7 @@ app.get("/api/leaderboard", async (req,res) => {
   res.json(result.rows);
 });
 app.get("/", (req,res)=>{
-  res.sendFile(__dirname + "/../frontend/index.html");
+  res.sendFile(process.cwd() + "/frontend/index.html");
 });
 app.listen(process.env.PORT || 3000, () => {
   console.log(`CoinHammer backend running on port ${process.env.PORT || 3000}`);
