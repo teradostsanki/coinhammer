@@ -48,7 +48,39 @@ async function post(path,body){const r=await fetch(api+path,{method:"POST",heade
 $("earn").onclick=async()=>{ $("earn").disabled=true;let s=10;$("timer").textContent="Earning for "+s+"s";const t=setInterval(async()=>{s--;$("timer").textContent="Earning for "+s+"s";if(s<=0){clearInterval(t);try{const j=await post("/api/earn",{id});balance=j.balance;render();$("timer").textContent="+100 coins";}catch(e){$("notice").textContent=e.message}$("earn").disabled=false}},1000)}
 $("daily").onclick=async()=>{try{const j=await post("/api/daily",{id});balance=j.balance;render();$("notice").textContent="+250 daily bonus"}catch(e){$("notice").textContent=e.message}}
 $("invite").onclick=async()=>{try{const j=await (await fetch(api+"/api/referral/"+encodeURIComponent(id))).json();$("output").classList.add("show");$("output").innerHTML="<h3>👥 Your Referral Link</h3><div class='muted' id='refLink'>"+j.link+"</div><button id='copyRef' style='margin-top:12px;width:100%'>📋 Copy Referral Link</button>";$("copyRef").onclick=async()=>{await navigator.clipboard.writeText(j.link);$("copyRef").textContent="✅ Copied!"}}catch(e){$("notice").textContent=e.message}}
-$("tasks").onclick=()=>{$("notice").textContent="Tasks module: add verified Telegram/social tasks in Phase 2."}
+$("tasks").onclick=async()=>{
+  try{
+    const r=await fetch(api+"/api/tasks");
+    const j=await r.json();
+
+    $("output").style.display="block";
+    $("output").innerHTML="<h3>📋 Tasks</h3>"+j.tasks.map(t=>
+      `<div style="padding:12px;margin:8px 0;background:#1b2230;border-radius:12px">
+        <b>${t.title}</b>
+        <div class="muted">Reward: ${t.reward} COIN</div>
+        <button onclick="completeTask('${t.id}')">✅ Complete</button>
+      </div>`
+    ).join("");
+  }catch(e){
+    $("notice").textContent="Unable to load tasks";
+  }
+};
+
+async function completeTask(taskId){
+  try{
+    const j=await post("/api/tasks/complete",{id,taskId});
+
+    if(j.error){
+      $("notice").textContent=j.error;
+      return;
+    }
+
+    $("notice").textContent="Task completed! +" + (j.reward||0) + " COIN";
+    await load();
+  }catch(e){
+    $("notice").textContent="Task completion failed";
+  }
+}
 $("leader").onclick=async()=>{try{const list=await (await fetch(api+"/api/leaderboard")).json();$("output").classList.add("show");$("output").innerHTML="<h3>🏆 Leaderboard</h3>"+list.map((u,i)=>"<div>"+(i+1)+". "+(u.username||"User")+" — "+u.balance.toLocaleString()+"</div>").join("")}catch(e){$("notice").textContent=e.message}}
 $("withdraw").onclick=async()=>{try{const amount=Number($("amount").value);const j=await post("/api/withdraw",{id,amount});balance=j.balance;render();$("notice").textContent="Withdrawal request submitted"}catch(e){$("notice").textContent=e.message}}
 load();
