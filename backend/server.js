@@ -125,6 +125,22 @@ app.post("/api/referral/claim", async (req,res) => {
 
   res.json({ok:true});
 });
+app.get("/api/tasks", (req,res) => {
+  res.json({
+    tasks: [
+      {
+        id: "telegram",
+        title: "Join Telegram",
+        reward: 100
+      },
+      {
+        id: "social",
+        title: "Follow Social Media",
+        reward: 100
+      }
+    ]
+  });
+});
 app.post("/api/tasks/complete", async (req,res) => {
   const id = String(req.body.id || "");
   const taskId = String(req.body.taskId || "");
