@@ -185,7 +185,7 @@ app.post("/api/tasks/complete", async (req,res) => {
     }
 
     const updatedUser = await client.query(
-      "UPDATE users SET tasks_completed = tasks_completed + 1 WHERE id = $1 RETURNING *",
+      "UPDATE users SET tasks_completed = tasks_completed + 1, balance = balance + 100 WHERE id = $1 RETURNING *",
       [id]
     );
 
