@@ -173,19 +173,55 @@ app.post("/api/tasks/complete", async (req,res) => {
     }
 
     const taskResult = await client.query(
-      `INSERT INTO user_tasks (user_id, task_id)
-       VALUES ($1, $2)
+      `INSERT INTO user_tasks (user_id, task_id, reward_given)
+VALUES ($1, $2, TRUE)
        ON CONFLICT (user_id, task_id) DO NOTHING
        RETURNING id`,
       [id, taskId]
     );
 
     if (taskResult.rows.length === 0) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({
-        error:"Task already completed",
-        duplicate:true
-      });
+  const existingTask = await client.query(
+    `SELECT * FROM user_tasks
+     WHERE user_id = $1 AND task_id = $2
+     FOR UPDATE`,
+    [id, taskId]
+  );
+
+  if (existingTask.rows[0]?.reward_given === false) {
+    const recoveredUser = await client.query(
+      `UPDATE users
+       SET balance = balance + 100
+       WHERE id = $1
+       RETURNING *`,
+      [id]
+    );
+
+    await client.query(
+      `UPDATE user_tasks
+       SET reward_given = TRUE
+       WHERE user_id = $1 AND task_id = $2`,
+      [id, taskId]
+    );
+
+    await client.query("COMMIT");
+
+    return res.json({
+      ok: true,
+      task_id: taskId,
+      reward: 100,
+      balance: recoveredUser.rows[0].balance,
+      recovered: true
+    });
+  }
+
+  await client.query("ROLLBACK");
+
+  return res.status(409).json({
+    error: "Task already completed",
+    duplicate: true
+  });
+}
     }
 
     const updatedUser = await client.query(
