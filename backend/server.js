@@ -154,7 +154,9 @@ app.post("/api/tasks/complete", async (req,res) => {
   const taskId = String(req.body.taskId || "");
 
   if (!id || !taskId) {
-    return res.status(400).json({error:"Missing user id or task id"});
+    return res.status(400).json({
+      error: "Missing user id or task id"
+    });
   }
 
   const client = await pool.connect();
@@ -169,63 +171,69 @@ app.post("/api/tasks/complete", async (req,res) => {
 
     if (userResult.rows.length === 0) {
       await client.query("ROLLBACK");
-      return res.status(404).json({error:"User not found"});
+      return res.status(404).json({
+        error: "User not found"
+      });
     }
 
     const taskResult = await client.query(
       `INSERT INTO user_tasks (user_id, task_id, reward_given)
-VALUES ($1, $2, TRUE)
+       VALUES ($1, $2, TRUE)
        ON CONFLICT (user_id, task_id) DO NOTHING
        RETURNING id`,
       [id, taskId]
     );
 
+    // Old completed task: recover missing reward once
     if (taskResult.rows.length === 0) {
-  const existingTask = await client.query(
-    `SELECT * FROM user_tasks
-     WHERE user_id = $1 AND task_id = $2
-     FOR UPDATE`,
-    [id, taskId]
-  );
+      const existingTask = await client.query(
+        `SELECT * FROM user_tasks
+         WHERE user_id = $1 AND task_id = $2
+         FOR UPDATE`,
+        [id, taskId]
+      );
 
-  if (existingTask.rows[0]?.reward_given === false) {
-    const recoveredUser = await client.query(
-      `UPDATE users
-       SET balance = balance + 100
-       WHERE id = $1
-       RETURNING *`,
-      [id]
-    );
+      if (existingTask.rows[0]?.reward_given === false) {
+        const recoveredUser = await client.query(
+          `UPDATE users
+           SET balance = balance + 100
+           WHERE id = $1
+           RETURNING *`,
+          [id]
+        );
 
-    await client.query(
-      `UPDATE user_tasks
-       SET reward_given = TRUE
-       WHERE user_id = $1 AND task_id = $2`,
-      [id, taskId]
-    );
+        await client.query(
+          `UPDATE user_tasks
+           SET reward_given = TRUE
+           WHERE user_id = $1 AND task_id = $2`,
+          [id, taskId]
+        );
 
-    await client.query("COMMIT");
+        await client.query("COMMIT");
 
-    return res.json({
-      ok: true,
-      task_id: taskId,
-      reward: 100,
-      balance: recoveredUser.rows[0].balance,
-      recovered: true
-    });
-  }
+        return res.json({
+          ok: true,
+          task_id: taskId,
+          reward: 100,
+          balance: recoveredUser.rows[0].balance,
+          recovered: true
+        });
+      }
 
-  await client.query("ROLLBACK");
+      await client.query("ROLLBACK");
 
-  return res.status(409).json({
-    error: "Task already completed",
-    duplicate: true
-  });
-}
+      return res.status(409).json({
+        error: "Task already completed",
+        duplicate: true
+      });
     }
 
     const updatedUser = await client.query(
-      "UPDATE users SET tasks_completed = tasks_completed + 1, balance = balance + 100 WHERE id = $1 RETURNING *",
+      `UPDATE users
+       SET tasks_completed = tasks_completed + 1,
+           balance = balance + 100
+       WHERE id = $1
+       RETURNING *`,
       [id]
     );
 
@@ -243,12 +251,16 @@ VALUES ($1, $2, TRUE)
 
       if (referral.rows.length > 0) {
         await client.query(
-          "UPDATE users SET balance = balance + 500 WHERE id = $1",
+          `UPDATE users
+           SET balance = balance + 500
+           WHERE id = $1`,
           [referral.rows[0].referrer_id]
         );
 
         await client.query(
-          "UPDATE referrals SET reward_given = TRUE WHERE id = $1",
+          `UPDATE referrals
+           SET reward_given = TRUE
+           WHERE id = $1`,
           [referral.rows[0].id]
         );
 
@@ -259,20 +271,27 @@ VALUES ($1, $2, TRUE)
     await client.query("COMMIT");
 
     res.json({
-      ok:true,
-      task_id:taskId,
-      tasks_completed:user.tasks_completed,
-      referral_reward:referralReward
+      ok: true,
+      task_id: taskId,
+      tasks_completed: user.tasks_completed,
+      reward: 100,
+      balance: user.balance,
+      referral_reward: referralReward
     });
 
   } catch (error) {
     await client.query("ROLLBACK");
     console.error(error);
-    res.status(500).json({error:"Task completion failed"});
+
+    res.status(500).json({
+      error: "Task completion failed"
+    });
+
   } finally {
     client.release();
   }
 });
+  
 app.post("/api/withdraw", async (req,res) => {
   const id = String(req.body.id || "");
   const amount = Number(req.body.amount);
