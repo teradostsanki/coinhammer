@@ -34,6 +34,10 @@ const initDb = async () => {
   );
 `);
   await pool.query(`
+  ALTER TABLE user_tasks
+  ADD COLUMN IF NOT EXISTS reward_given BOOLEAN DEFAULT FALSE
+`);
+  await pool.query(`
   CREATE TABLE IF NOT EXISTS referrals (
       id SERIAL PRIMARY KEY,
       referrer_id TEXT NOT NULL,
