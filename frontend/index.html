@@ -78,7 +78,7 @@ async function completeTask(taskId){
     $("notice").textContent="Task completed! +" + (j.reward||0) + " COIN";
     await load();
   }catch(e){
-    $("notice").textContent="Task completion failed";
+    $("notice").textContent=e.message;
   }
 }
 $("leader").onclick=async()=>{try{const list=await (await fetch(api+"/api/leaderboard")).json();$("output").classList.add("show");$("output").innerHTML="<h3>🏆 Leaderboard</h3>"+list.map((u,i)=>"<div>"+(i+1)+". "+(u.username||"User")+" — "+u.balance.toLocaleString()+"</div>").join("")}catch(e){$("notice").textContent=e.message}}
