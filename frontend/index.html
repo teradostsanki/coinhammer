@@ -80,8 +80,9 @@ async function completeTask(taskId){
     setTimeout(()=>$("notice").textContent="",3000);
     await load();
   }catch(e){
-    $("notice").textContent=e.message;
-  }
+  $("notice").textContent=e.message;
+  setTimeout(()=>$("notice").textContent="",3000);
+}
 }
 $("leader").onclick=async()=>{try{const list=await (await fetch(api+"/api/leaderboard")).json();$("output").classList.add("show");$("output").innerHTML="<h3>🏆 Leaderboard</h3>"+list.map((u,i)=>"<div>"+(i+1)+". "+(u.username||"User")+" — "+u.balance.toLocaleString()+"</div>").join("")}catch(e){$("notice").textContent=e.message}}
 $("withdraw").onclick=async()=>{try{const amount=Number($("amount").value);const j=await post("/api/withdraw",{id,amount});balance=j.balance;render();$("notice").textContent="Withdrawal request submitted"}catch(e){$("notice").textContent=e.message}}
