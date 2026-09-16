@@ -89,17 +89,39 @@ app.post("/api/earn", async (req,res) => {
 });
 
 app.post("/api/daily", async (req,res) => {
-  const id = String(req.body.id || "");
-  if (!id) return res.status(400).json({error:"Missing user id"});
-  const u = await getUser(id);
-  const today = new Date().toISOString().slice(0,10);
-  if (String(u.last_daily).slice(0,10) === today) return res.status(409).json({error:"Daily bonus already claimed"});
-  const updated = await pool.query(
-  "UPDATE users SET last_daily = $1, balance = balance + 250 WHERE id = $2 RETURNING *",
-  [today, id]
-);
-  
-  res.json({ok:true, reward:250, balance:updated.rows[0].balance});
+  try {
+    const id = String(req.body.id || "");
+    if(!id) return res.status(400).json({error:"Missing user id"});
+
+    await getUser(id);
+
+    const today = new Date().toISOString().slice(0,10);
+
+    const updated = await pool.query(
+      `UPDATE users
+       SET last_daily = $1,
+           balance = balance + 250
+       WHERE id = $2
+         AND (last_daily IS NULL OR last_daily < $1::date)
+       RETURNING *`,
+      [today, id]
+    );
+
+    if(updated.rows.length === 0){
+      return res.status(409).json({
+        error:"Daily bonus already claimed today"
+      });
+    }
+
+    res.json({
+      ok:true,
+      reward:250,
+      balance:updated.rows[0].balance
+    });
+
+  } catch(e) {
+    res.status(500).json({error:e.message});
+  }
 });
 
 app.get("/api/referral/:id", (req,res) => {
