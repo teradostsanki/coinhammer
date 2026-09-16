@@ -76,6 +76,7 @@ async function completeTask(taskId){
     }
 
     $("notice").textContent="Task completed! +" + (j.reward||0) + " COIN";
+    setTimeout(()=>$("notice").textContent="",3000);
     await load();
   }catch(e){
     $("notice").textContent=e.message;
