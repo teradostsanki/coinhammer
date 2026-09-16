@@ -72,6 +72,7 @@ async function completeTask(taskId){
 
     if(j.error){
       $("notice").textContent=j.error;
+      setTimeout(()=>$("notice").textContent="",3000);
       return;
     }
 
