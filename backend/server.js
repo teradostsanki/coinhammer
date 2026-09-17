@@ -85,16 +85,47 @@ app.get("/api/user/:id", async (req,res) => {
 });
 
 app.post("/api/earn", async (req,res) => {
-  const id = String(req.body.id || "");
-  if (!id) return res.status(400).json({error:"Missing user id"});
+  try {
+    const id = String(req.body.id || "");
+    if (!id) return res.status(400).json({error:"Missing user id"});
 
-  const u = await getUser(id);
-  const updated = await pool.query(
-    "UPDATE users SET balance = balance + 100 WHERE id = $1 RETURNING *",
-    [id]
-  );
+    await getUser(id);
 
-  res.json({ok:true, reward:100, balance:updated.rows[0].balance});
+    const updated = await pool.query(
+      `UPDATE users
+       SET daily_earn_count =
+             CASE
+               WHEN daily_earn_date IS NULL OR daily_earn_date < CURRENT_DATE
+               THEN 1
+               ELSE daily_earn_count + 1
+             END,
+           daily_earn_date = CURRENT_DATE,
+           balance = balance + 100
+       WHERE id = $1
+         AND (
+           daily_earn_date IS NULL
+           OR daily_earn_date < CURRENT_DATE
+           OR daily_earn_count < 5
+         )
+       RETURNING *`,
+      [id]
+    );
+
+    if (updated.rows.length === 0) {
+      return res.status(429).json({
+        error:"Daily earning limit reached"
+      });
+    }
+
+    res.json({
+      ok:true,
+      reward:100,
+      balance:updated.rows[0].balance,
+      dailyEarnCount:updated.rows[0].daily_earn_count
+    });
+  } catch(e) {
+    res.status(500).json({error:e.message});
+  }
 });
 
 app.post("/api/daily", async (req,res) => {
