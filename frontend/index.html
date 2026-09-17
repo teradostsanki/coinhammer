@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CoinHammer</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://sad.adsgram.ai/js/sad.min.js"></script>
 <style>
 :root{--bg:#0c1016;--card:#151b24;--border:#27303d;--text:#f5f7fa;--muted:#929dad;--gold:#e8b84d}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,sans-serif}
@@ -37,6 +38,7 @@ input{width:100%;padding:13px;border-radius:12px;border:1px solid var(--border);
 const tg=window.Telegram?.WebApp;
 if(tg){tg.ready();tg.expand();}
 const api="https://coinhammer.onrender.com";
+const AdController=window.Adsgram.init({blockId:"48321"});
 const tgUser=tg?.initDataUnsafe?.user;
 const id=String(tgUser?.id||"demo-user");
 const name=tgUser?.username||tgUser?.first_name||"DemoUser";
