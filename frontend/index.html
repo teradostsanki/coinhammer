@@ -30,7 +30,49 @@ input{width:100%;padding:13px;border-radius:12px;border:1px solid var(--border);
 <button class="card" id="invite"><div class="icon">👥</div><div class="title">Invite Friends</div><div class="muted">Referral rewards</div></button>
 <button class="card" id="leader"><div class="icon">🏆</div><div class="title">Leaderboard</div><div class="muted">Top earners</div></button>
 </div>
-<section class="panel" id="wallet"><h3>💰 Wallet</h3><div class="muted">Withdrawal requests are pending admin approval in this starter.</div><input id="amount" type="number" min="1" placeholder="Coins to withdraw"><button id="withdraw">Request Withdrawal</button></section>
+<section class="panel" id="wallet">
+  <h3>💰 Withdraw</h3>
+
+  <div class="muted">
+    Minimum withdrawal ₹10 • Maximum 2 withdrawals per day • 18% GST
+  </div>
+
+  <div class="card">
+    <h3>🏦 Bank Account</h3>
+
+    <input id="bankName" type="text"
+      placeholder="Account Holder Name">
+
+    <input id="bankAccount" type="text"
+      placeholder="Account Number">
+
+    <input id="bankIfsc" type="text"
+      placeholder="IFSC Code">
+
+    <input id="bankAmount" type="number"
+      min="10"
+      placeholder="Withdrawal Amount ₹">
+
+    <button id="bankWithdraw">🏦 Withdraw to Bank</button>
+  </div>
+
+  <div class="card">
+    <h3>📱 UPI</h3>
+
+    <input id="upiId" type="text"
+      placeholder="UPI ID (example@upi)">
+
+    <input id="upiAmount" type="number"
+      min="10"
+      placeholder="Withdrawal Amount ₹">
+
+    <button id="upiWithdraw">📱 Withdraw via UPI</button>
+  </div>
+
+  <div class="muted">
+    ⏳ Withdrawal requests are sent for admin approval.
+  </div>
+</section>
 <section class="panel" id="output"></section>
 <div class="notice" id="notice" aria-live="polite"></div>
 </main>
