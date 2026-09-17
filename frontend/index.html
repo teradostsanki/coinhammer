@@ -43,39 +43,47 @@ input{width:100%;padding:13px;border-radius:12px;border:1px solid var(--border);
   <h3>💰 Withdraw</h3>
 
   <div class="muted">
-    Minimum withdrawal ₹10 • Maximum 2 withdrawals per day • 18% GST
+    Minimum withdrawal ₹10 • Maximum 2 withdrawals per day
   </div>
 
-  <div class="card">
+  <div class="withdraw-options">
+
+    <button class="card" id="bankOption" type="button">
+      <div class="icon">🏦</div>
+      <div class="title">Bank Account</div>
+      <div class="muted">Withdraw to your bank account</div>
+    </button>
+
+    <button class="card" id="upiOption" type="button">
+      <div class="icon">📱</div>
+      <div class="title">UPI</div>
+      <div class="muted">Withdraw using UPI</div>
+    </button>
+
+  </div>
+
+  <div class="card" id="bankForm" style="display:none;">
     <h3>🏦 Bank Account</h3>
 
-    <input id="bankName" type="text"
-      placeholder="Account Holder Name">
+    <input id="bankName" type="text" placeholder="Account Holder Name">
+    <input id="bankAccount" type="text" placeholder="Account Number">
+    <input id="bankIfsc" type="text" placeholder="IFSC Code">
+    <input id="bankAmount" type="number" min="10" placeholder="Withdrawal Amount ₹">
 
-    <input id="bankAccount" type="text"
-      placeholder="Account Number">
-
-    <input id="bankIfsc" type="text"
-      placeholder="IFSC Code">
-
-    <input id="bankAmount" type="number"
-      min="10"
-      placeholder="Withdrawal Amount ₹">
-
-    <button id="bankWithdraw">🏦 Withdraw to Bank</button>
+    <button id="bankWithdraw" type="button">
+      🏦 Submit Withdrawal Request
+    </button>
   </div>
 
-  <div class="card">
-    <h3>📱 UPI</h3>
+  <div class="card" id="upiForm" style="display:none;">
+    <h3>📱 UPI Withdrawal</h3>
 
-    <input id="upiId" type="text"
-      placeholder="UPI ID (example@upi)">
+    <input id="upiId" type="text" placeholder="UPI ID (example@upi)">
+    <input id="upiAmount" type="number" min="10" placeholder="Withdrawal Amount ₹">
 
-    <input id="upiAmount" type="number"
-      min="10"
-      placeholder="Withdrawal Amount ₹">
-
-    <button id="upiWithdraw">📱 Withdraw via UPI</button>
+    <button id="upiWithdraw" type="button">
+      📱 Submit Withdrawal Request
+    </button>
   </div>
 
   <div class="muted">
@@ -138,6 +146,15 @@ async function completeTask(taskId){
 }
 }
   $("withdraw").onclick=()=>{$("wallet").classList.add("show");$("wallet").scrollIntoView({behavior:"smooth"});}
+$("bankOption").onclick=()=>{
+  $("bankForm").style.display="block";
+  $("upiForm").style.display="none";
+};
+
+$("upiOption").onclick=()=>{
+  $("upiForm").style.display="block";
+  $("bankForm").style.display="none";
+};
 $("leader").onclick=async()=>{try{const list=await (await fetch(api+"/api/leaderboard")).json();$("output").classList.add("show");$("output").innerHTML="<h3>🏆 Leaderboard</h3>"+list.map((u,i)=>"<div>"+(i+1)+". "+(u.username||"User")+" — "+u.balance.toLocaleString()+"</div>").join("")}catch(e){$("notice").textContent=e.message}}
   load();
 </script>
