@@ -353,18 +353,153 @@ app.post("/api/tasks/complete", async (req,res) => {
     client.release();
   }
 });
-  
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS withdrawals (
+    id SERIAL PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    method TEXT NOT NULL,
+    account_holder_name TEXT,
+    account_number TEXT,
+    ifsc TEXT,
+    upi_id TEXT,
+    amount NUMERIC(12,2) NOT NULL,
+    status TEXT DEFAULT 'pending',
+    admin_note TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMP
+  )
+`);  
 app.post("/api/withdraw", async (req,res) => {
-  const id = String(req.body.id || "");
-  const amount = Number(req.body.amount);
-  if (!id || !Number.isFinite(amount) || amount <= 0) return res.status(400).json({error:"Invalid request"});
-  const u = await getUser(id);
-  if (amount > u.balance) return res.status(400).json({error:"Insufficient balance"});
-  const updated = await pool.query(
-  "UPDATE users SET balance = balance - $1 WHERE id = $2 RETURNING *",
-  [amount, id]
-);
-  res.json({ok:true, status:"pending", balance:updated.rows[0].balance});
+  const client = await pool.connect();
+
+  try {
+    const id = String(req.body.id || "");
+    const method = String(req.body.method || "").toLowerCase();
+    const amount = Number(req.body.amount);
+
+    const accountHolderName = String(req.body.accountHolderName || "");
+    const accountNumber = String(req.body.accountNumber || "");
+    const ifsc = String(req.body.ifsc || "");
+    const upiId = String(req.body.upiId || "");
+
+    if (!id || !["bank", "upi"].includes(method)) {
+      return res.status(400).json({
+        error: "Invalid withdrawal method"
+      });
+    }
+
+    if (!Number.isFinite(amount) || amount < 10) {
+      return res.status(400).json({
+        error: "Minimum withdrawal is ₹10"
+      });
+    }
+
+    if (method === "bank") {
+      if (!accountHolderName || !accountNumber || !ifsc) {
+        return res.status(400).json({
+          error: "Bank details are required"
+        });
+      }
+    }
+
+    if (method === "upi") {
+      if (!upiId) {
+        return res.status(400).json({
+          error: "UPI ID is required"
+        });
+      }
+    }
+
+    await client.query("BEGIN");
+
+    const userResult = await client.query(
+      "SELECT * FROM users WHERE id = $1 FOR UPDATE",
+      [id]
+    );
+
+    if (userResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({
+        error: "User not found"
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    if (amount * 100 > user.balance) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        error: "Insufficient balance"
+      });
+    }
+
+    const countResult = await client.query(
+      `SELECT COUNT(*)::int AS count
+       FROM withdrawals
+       WHERE user_id = $1
+       AND created_at::date = CURRENT_DATE`,
+      [id]
+    );
+
+    if (countResult.rows[0].count >= 2) {
+      await client.query("ROLLBACK");
+      return res.status(429).json({
+        error: "Daily withdrawal limit reached. Maximum 2 withdrawals per day."
+      });
+    }
+
+    await client.query(
+      `UPDATE users
+       SET balance = balance - ($1 * 100)
+       WHERE id = $2`,
+      [amount, id]
+    );
+
+    const withdrawal = await client.query(
+      `INSERT INTO withdrawals
+       (
+         user_id,
+         method,
+         account_holder_name,
+         account_number,
+         ifsc,
+         upi_id,
+         amount,
+         status
+       )
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'pending')
+       RETURNING *`,
+      [
+        id,
+        method,
+        method === "bank" ? accountHolderName : null,
+        method === "bank" ? accountNumber : null,
+        method === "bank" ? ifsc : null,
+        method === "upi" ? upiId : null,
+        amount
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({
+      ok: true,
+      status: "pending",
+      message: "Withdrawal request submitted successfully",
+      withdrawalId: withdrawal.rows[0].id,
+      balance: user.balance - (amount * 100)
+    });
+
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error(e);
+
+    res.status(500).json({
+      error: "Withdrawal request failed"
+    });
+  } finally {
+    client.release();
+  }
 });
 
 app.get("/api/leaderboard", async (req,res) => {
