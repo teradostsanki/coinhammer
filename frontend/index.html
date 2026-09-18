@@ -15,45 +15,22 @@ button{border:0;border-radius:14px;padding:14px 16px;font-weight:800;cursor:poin
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}.card{background:var(--card);border:1px solid var(--border);color:var(--text);text-align:left;min-height:105px}.icon{font-size:24px}.title{margin-top:8px}.notice{text-align:center;min-height:22px;margin:14px 0;color:var(--muted);font-size:13px}
 .panel{display:none;background:var(--card);border:1px solid var(--border);border-radius:18px;padding:18px;margin-top:14px}.panel.show{display:block}
 input{width:100%;padding:13px;border-radius:12px;border:1px solid var(--border);background:#0e141c;color:var(--text);margin:10px 0}
-.withdraw-options .card{
-  width:100%;
-  box-sizing:border-box;
-  background:#111a26;
-}
-
-#bankForm,
-#upiForm{
-  width:100%;
-  box-sizing:border-box;
-}
-
-#bankForm input,
-#upiForm input{
-  display:block;
-  width:100%;
-  box-sizing:border-box;
-  margin:10px 0;
-}
-
-#bankForm button,
-#upiForm button{
-  width:100%;
-  min-height:48px;
-  border-radius:12px;
-  font-weight:800;
-}
 /* Professional Withdraw UI */
 .withdraw-options{
   display:grid;
   grid-template-columns:1fr 1fr;
-  gap:12px;
+  gap:14px;
   margin-top:18px;
 }
 
 .withdraw-options .card{
-  min-height:125px;
-  padding:18px;
-  transition:transform .2s ease, border-color .2s ease;
+  width:100%;
+  min-height:135px;
+  padding:20px;
+  background:#111a26;
+  border:1px solid var(--border);
+  border-radius:18px;
+  transition:transform .2s ease,border-color .2s ease;
 }
 
 .withdraw-options .card:active{
