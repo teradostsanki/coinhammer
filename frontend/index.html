@@ -7,14 +7,215 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
 <style>
-:root{--bg:#0c1016;--card:#151b24;--border:#27303d;--text:#f5f7fa;--muted:#929dad;--gold:#e8b84d}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,sans-serif}
-main{max-width:620px;margin:auto;padding:18px}.hero{background:linear-gradient(145deg,#19212c,#10151c);border:1px solid var(--border);border-radius:24px;padding:24px;text-align:center}
-.brand{font-weight:900;letter-spacing:2px;color:var(--gold)}.balance{font-size:44px;font-weight:900;margin-top:10px}.muted{color:var(--muted);font-size:13px}
-button{border:0;border-radius:14px;padding:14px 16px;font-weight:800;cursor:pointer}.earn{width:100%;margin-top:18px;background:var(--gold);color:#17130a;font-size:16px}.earn:disabled{opacity:.55}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}.card{background:var(--card);border:1px solid var(--border);color:var(--text);text-align:left;min-height:105px}.icon{font-size:24px}.title{margin-top:8px}.notice{text-align:center;min-height:22px;margin:14px 0;color:var(--muted);font-size:13px}
-.panel{display:none;background:var(--card);border:1px solid var(--border);border-radius:18px;padding:18px;margin-top:14px}.panel.show{display:block}
-input{width:100%;padding:13px;border-radius:12px;border:1px solid var(--border);background:#0e141c;color:var(--text);margin:10px 0}
+:root{
+  --bg:#080b10;
+  --card:#111720;
+  --card2:#151d28;
+  --border:#26313f;
+  --text:#f5f7fa;
+  --muted:#8d99a8;
+  --gold:#f4c95d;
+  --gold2:#dcae3f;
+  --green:#43d17a;
+}
+
+*{
+  box-sizing:border-box;
+}
+
+body{
+  margin:0;
+  background:
+    radial-gradient(circle at 50% -10%,#1d2735 0%,#0b0f15 42%,#080b10 75%);
+  color:var(--text);
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+
+main{
+  max-width:620px;
+  margin:auto;
+  padding:18px 16px 30px;
+}
+
+.hero{
+  position:relative;
+  overflow:hidden;
+  background:linear-gradient(145deg,#18212c,#0e141c);
+  border:1px solid var(--border);
+  border-radius:26px;
+  padding:24px 20px 22px;
+  box-shadow:0 18px 45px rgba(0,0,0,.28);
+}
+
+.hero:before{
+  content:"";
+  position:absolute;
+  width:180px;
+  height:180px;
+  right:-80px;
+  top:-90px;
+  background:rgba(244,201,93,.10);
+  border-radius:50%;
+}
+
+.brand{
+  position:relative;
+  font-size:15px;
+  font-weight:900;
+  letter-spacing:3px;
+  color:var(--gold);
+}
+
+.balance{
+  position:relative;
+  font-size:42px;
+  line-height:1.05;
+  font-weight:900;
+  margin-top:14px;
+  letter-spacing:-1px;
+}
+
+.muted{
+  color:var(--muted);
+  font-size:13px;
+}
+
+.hero .muted{
+  margin-top:6px;
+}
+
+button{
+  border:0;
+  font-family:inherit;
+  border-radius:14px;
+  padding:14px 16px;
+  font-weight:800;
+  cursor:pointer;
+}
+
+.earn{
+  position:relative;
+  width:100%;
+  margin-top:22px;
+  padding:16px;
+  background:linear-gradient(135deg,var(--gold),var(--gold2));
+  color:#17130a;
+  font-size:16px;
+  box-shadow:0 8px 24px rgba(220,174,63,.18);
+}
+
+.earn:active{
+  transform:scale(.98);
+}
+
+.earn:disabled{
+  opacity:.55;
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  margin-top:14px;
+}
+
+.card{
+  background:linear-gradient(145deg,var(--card2),var(--card));
+  border:1px solid var(--border);
+  border-radius:18px;
+  color:var(--text);
+  text-align:left;
+  min-height:108px;
+  padding:18px;
+  box-shadow:0 8px 25px rgba(0,0,0,.14);
+}
+
+.card:active{
+  transform:scale(.98);
+}
+
+.icon{
+  font-size:24px;
+}
+
+.title{
+  margin-top:9px;
+  font-size:15px;
+  font-weight:800;
+}
+
+.notice{
+  text-align:center;
+  min-height:22px;
+  margin:14px 0;
+  color:var(--muted);
+  font-size:13px;
+}
+
+.panel{
+  display:none;
+  background:linear-gradient(145deg,var(--card2),var(--card));
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:18px;
+  margin-top:14px;
+  box-shadow:0 10px 30px rgba(0,0,0,.18);
+}
+
+.panel.show{
+  display:block;
+}
+
+input{
+  width:100%;
+  padding:14px;
+  border-radius:13px;
+  border:1px solid var(--border);
+  outline:none;
+  background:#0b1118;
+  color:var(--text);
+  margin:8px 0;
+  font-size:14px;
+}
+
+input:focus{
+  border-color:var(--gold);
+}
+
+.withdraw-options{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:14px;
+  margin-top:18px;
+}
+
+.withdraw-options .card{
+  width:100%;
+  min-height:135px;
+  padding:20px;
+  background:linear-gradient(145deg,#151e29,#10161e);
+  border:1px solid var(--border);
+  border-radius:18px;
+  transition:transform .2s ease,border-color .2s ease;
+}
+
+.withdraw-options .card:active{
+  transform:scale(.97);
+}
+
+@media(max-width:380px){
+  main{
+    padding:14px 12px 24px;
+  }
+
+  .balance{
+    font-size:36px;
+  }
+
+  .hero{
+    padding:21px 16px;
+  }
+}
 /* Professional Withdraw UI */
 .withdraw-options{
   display:grid;
