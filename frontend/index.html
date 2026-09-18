@@ -202,6 +202,62 @@ $("upiOption").onclick=()=>{
   $("upiForm").style.display="block";
   $("bankForm").style.display="none";
 };
+  async function submitWithdrawal(method){
+  try{
+    let amount=0;
+    let body={id,method};
+
+    if(method==="bank"){
+      const accountHolderName=$("bankName").value.trim();
+      const accountNumber=$("bankAccount").value.trim();
+      const ifsc=$("bankIfsc").value.trim();
+      amount=Number($("bankAmount").value);
+
+      if(!accountHolderName||!accountNumber||!ifsc||amount<10){
+        throw new Error("Please fill all bank details and minimum ₹10");
+      }
+
+      body.accountHolderName=accountHolderName;
+      body.accountNumber=accountNumber;
+      body.ifsc=ifsc;
+    }
+
+    if(method==="upi"){
+      const upiId=$("upiId").value.trim();
+      amount=Number($("upiAmount").value);
+
+      if(!upiId||amount<10){
+        throw new Error("Please enter UPI ID and minimum ₹10");
+      }
+
+      body.upiId=upiId;
+    }
+
+    body.amount=amount;
+
+    const j=await post("/api/withdraw",body);
+
+    balance=j.balance;
+    render();
+
+    $("notice").textContent="✅ Withdrawal request submitted successfully";
+
+    if(method==="bank"){
+      $("bankAmount").value="";
+    }else{
+      $("upiAmount").value="";
+    }
+
+    setTimeout(()=>$("notice").textContent="",3000);
+
+  }catch(e){
+    $("notice").textContent="❌ "+e.message;
+    setTimeout(()=>$("notice").textContent="",3000);
+  }
+}
+
+$("bankWithdraw").onclick=()=>submitWithdrawal("bank");
+$("upiWithdraw").onclick=()=>submitWithdrawal("upi");
 $("leader").onclick=async()=>{try{const list=await (await fetch(api+"/api/leaderboard")).json();$("output").classList.add("show");$("output").innerHTML="<h3>🏆 Leaderboard</h3>"+list.map((u,i)=>"<div>"+(i+1)+". "+(u.username||"User")+" — "+u.balance.toLocaleString()+"</div>").join("")}catch(e){$("notice").textContent=e.message}}
   load();
 </script>
