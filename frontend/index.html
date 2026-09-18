@@ -325,13 +325,56 @@ button:focus-visible,
 input:focus-visible{
   outline:2px solid rgba(245,196,81,.6);
   outline-offset:2px;
+}
+.mini-stats{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:8px;
+  margin:14px 0 18px;
+}
+
+.stat{
+  background:rgba(255,255,255,.035);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:10px 7px;
+  text-align:center;
+}
+
+.stat-value{
+  font-size:15px;
+  font-weight:800;
+  color:var(--gold2);
+}
+
+.stat-label{
+  margin-top:4px;
+  font-size:9px;
+  letter-spacing:1px;
+  color:var(--muted);
+  font-weight:700;
 }  
 </style>
 </head>
 <body><main>
 <section class="hero">
 <div class="brand">◆ COINHAMMER</div>
-<div class="balance" id="balance">0</div><div class="muted">COINS</div>
+<div class="balance" id="balance">0</div>
+<div class="muted">COINS</div>
+ <div class="mini-stats">
+  <div class="stat">
+    <div class="stat-value" id="rupees">₹0</div>
+    <div class="stat-label">VALUE</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" id="todayEarn">0</div>
+    <div class="stat-label">TODAY</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" id="adProgress">0/5</div>
+    <div class="stat-label">ADS</div>
+  </div>
+</div> 
 <button class="earn" id="earn">🚀 START EARNING</button>
 <div class="muted" id="timer">Ready</div>
 </section>
