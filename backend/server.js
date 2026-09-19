@@ -198,17 +198,17 @@ app.post("/api/referral/claim", async (req,res) => {
 app.get("/api/tasks", (req,res) => {
   res.json({
     tasks: [
-      {
-        id: "telegram",
-        title: "Join Telegram",
-        reward: 100
-      },
-      {
-        id: "social",
-        title: "Follow Social Media",
-        reward: 100
-      }
-    ]
+  {id:"telegram", title:"Join Telegram", reward:100},
+  {id:"social", title:"Follow Social Media", reward:100},
+  {id:"youtube", title:"Subscribe YouTube", reward:100},
+  {id:"instagram", title:"Follow Instagram", reward:100},
+  {id:"facebook", title:"Follow Facebook", reward:100},
+  {id:"twitter", title:"Follow X", reward:100},
+  {id:"channel", title:"Join Telegram Channel", reward:100},
+  {id:"community", title:"Join Community", reward:100},
+  {id:"share", title:"Share CoinHammer", reward:100},
+  {id:"visit", title:"Visit CoinHammer", reward:100}
+]
   });
 });
 app.post("/api/tasks/complete", async (req,res) => {
