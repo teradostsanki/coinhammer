@@ -460,12 +460,25 @@ try{
 const tgUser=tg?.initDataUnsafe?.user;
 const id=String(tgUser?.id||"demo-user");
 const name=tgUser?.username||tgUser?.first_name||"DemoUser";
+  const startParam=tg?.initDataUnsafe?.start_param||"";
 const $=x=>document.getElementById(x);
 let balance=0,dailyEarnCount=0,dailyEarnDate="";
 async function load(){try{const r=await fetch(api+"/api/user/"+encodeURIComponent(id));const u=await r.json();balance=u.balance;dailyEarnCount=u.daily_earn_count||0;dailyEarnDate=u.daily_earn_date||"";render()}catch(e){balance=1250;render();$("notice").textContent="Demo mode — connect the backend for real data."}}
 function render(){$("balance").textContent=balance.toLocaleString("en-IN");;$("rupees").textContent="₹"+(balance/100).toFixed(2);$("todayEarn").textContent=(dailyEarnCount*100).toLocaleString("en-IN");$("adProgress").textContent=dailyEarnCount+"/5"}
 async function post(path,body){const r=await fetch(api+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw new Error(j.error||"Request failed");return j}
-$("earn").onclick=async()=>{$("earn").disabled=true;$("timer").textContent="Opening rewarded ad...";try{const result=await AdController.show();if(!result?.done){$("timer").textContent="Ad not completed — no reward";return}const j=await post("/api/earn",{id});balance=j.balance;render();$("timer").textContent="+100 coins"}catch(e){$("notice").textContent=e.message;setTimeout(()=>$("notice").textContent="",3000)}finally{$("earn").disabled=false}}
+async function claimReferral(){
+  if(!startParam || startParam===id) return;
+
+  try{
+    await post("/api/referral/claim",{
+      referrerId:startParam,
+      referredId:id
+    });
+  }catch(e){
+    console.log("Referral claim skipped",e);
+  }
+}
+  $("earn").onclick=async()=>{$("earn").disabled=true;$("timer").textContent="Opening rewarded ad...";try{const result=await AdController.show();if(!result?.done){$("timer").textContent="Ad not completed — no reward";return}const j=await post("/api/earn",{id});balance=j.balance;render();$("timer").textContent="+100 coins"}catch(e){$("notice").textContent=e.message;setTimeout(()=>$("notice").textContent="",3000)}finally{$("earn").disabled=false}}
 $("daily").onclick=async()=>{$("output").classList.remove("show");$("output").style.display="none";try{const j=await post("/api/daily",{id});balance=j.balance;render();$("notice").textContent="+250 daily bonus";setTimeout(()=>$("notice").textContent="",3000)}catch(e){$("notice").textContent=e.message;setTimeout(()=>$("notice").textContent="",3000)}}
 $("invite").onclick=async()=>{try{const j=await (await fetch(api+"/api/referral/"+encodeURIComponent(id))).json();$("output").classList.add("show");$("output").innerHTML="<h3>👥 Your Referral Link</h3><div class='muted' id='refLink'>"+j.link+"</div><button id='copyRef' style='margin-top:12px;width:100%'>📋 Copy Referral Link</button>";$("copyRef").onclick=async()=>{await navigator.clipboard.writeText(j.link);$("copyRef").textContent="✅ Copied!"}}catch(e){$("notice").textContent=e.message}}
 $("tasks").onclick=async()=>{
@@ -573,5 +586,6 @@ $("bankWithdraw").onclick=()=>submitWithdrawal("bank");
 $("upiWithdraw").onclick=()=>submitWithdrawal("upi");
 $("leader").onclick=async()=>{try{const list=await (await fetch(api+"/api/leaderboard")).json();$("output").classList.add("show");$("output").innerHTML="<h3>🏆 Leaderboard</h3>"+list.map((u,i)=>"<div>"+(i+1)+". "+(u.username||"User")+" — "+u.balance.toLocaleString()+"</div>").join("")}catch(e){$("notice").textContent=e.message}}
 load();
+  claimReferral();
   </script>
 </body></html>
