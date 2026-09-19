@@ -183,17 +183,67 @@ app.post("/api/referral/claim", async (req,res) => {
     return res.status(400).json({error:"Self referral not allowed"});
   }
 
-  await getUser(referrerId);
-  await getUser(referredId);
+  const client = await pool.connect();
 
-  await pool.query(
-    `INSERT INTO referrals (referrer_id, referred_id)
-     VALUES ($1, $2)
-     ON CONFLICT (referred_id) DO NOTHING`,
-    [referrerId, referredId]
-  );
+  try {
+    await client.query("BEGIN");
 
-  res.json({ok:true});
+    await getUser(referrerId);
+    await getUser(referredId);
+
+    await client.query(
+      `INSERT INTO referrals (referrer_id, referred_id)
+       VALUES ($1, $2)
+       ON CONFLICT (referred_id) DO NOTHING`,
+      [referrerId, referredId]
+    );
+
+    const referral = await client.query(
+      `SELECT r.*, u.tasks_completed
+       FROM referrals r
+       JOIN users u ON u.id = r.referred_id
+       WHERE r.referred_id = $1
+       FOR UPDATE`,
+      [referredId]
+    );
+
+    let rewardGiven = false;
+
+    if (
+      referral.rows.length > 0 &&
+      referral.rows[0].reward_given === false &&
+      referral.rows[0].tasks_completed >= 10
+    ) {
+      await client.query(
+        `UPDATE users
+         SET balance = balance + 500
+         WHERE id = $1`,
+        [referral.rows[0].referrer_id]
+      );
+
+      await client.query(
+        `UPDATE referrals
+         SET reward_given = TRUE
+         WHERE id = $1`,
+        [referral.rows[0].id]
+      );
+
+      rewardGiven = true;
+    }
+
+    await client.query("COMMIT");
+
+    res.json({
+      ok:true,
+      reward_given:rewardGiven
+    });
+
+  } catch(e) {
+    await client.query("ROLLBACK");
+    res.status(500).json({error:e.message});
+  } finally {
+    client.release();
+  }
 });
 app.get("/api/tasks", (req,res) => {
   res.json({
