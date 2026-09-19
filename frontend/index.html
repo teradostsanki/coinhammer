@@ -451,7 +451,12 @@ input:focus-visible{
 const tg=window.Telegram?.WebApp;
 if(tg){tg.ready();tg.expand();}
 const api="https://coinhammer.onrender.com";
-const AdController=window.Adsgram?.init?.({blockId:"48321"})||null;
+let AdController=null;
+try{
+  AdController=window.Adsgram?.init?.({blockId:"48321"})||null;
+}catch(e){
+  console.log("AdsGram init skipped",e);
+}
 const tgUser=tg?.initDataUnsafe?.user;
 const id=String(tgUser?.id||"demo-user");
 const name=tgUser?.username||tgUser?.first_name||"DemoUser";
