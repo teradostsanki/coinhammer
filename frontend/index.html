@@ -504,7 +504,8 @@ async function completeTask(taskId){
   setTimeout(()=>$("notice").textContent="",3000);
 }
 }
-  $("withdraw").onclick=()=>{$("wallet").classList.add("show");$("wallet").scrollIntoView({behavior:"smooth"});}
+  $("withdraw").onclick=()=>
+{$("output").classList.remove("show");$("output").style.display="none";$("wallet").classList.add("show");$("wallet").scrollIntoView({behavior:"smooth"});}
 $("bankOption").onclick=()=>{
   $("bankForm").style.display="block";
   $("upiForm").style.display="none";
