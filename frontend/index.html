@@ -571,7 +571,7 @@ $("upiOption").onclick=()=>{
 $("bankWithdraw").onclick=()=>submitWithdrawal("bank");
 $("upiWithdraw").onclick=()=>submitWithdrawal("upi");
 $("leader").onclick=async()=>{try{const list=await (await fetch(api+"/api/leaderboard")).json();$("output").classList.add("show");$("output").innerHTML="<h3>🏆 Leaderboard</h3>"+list.map((u,i)=>"<div>"+(i+1)+". "+(u.username||"User")+" — "+u.balance.toLocaleString()+"</div>").join("")}catch(e){$("notice").textContent=e.message}}
-  console.log("COINHAMMER SCRIPT LOADED");
+  $("notice").textContent="SCRIPT LOADED";
 load();
 </script>
 </body></html>
