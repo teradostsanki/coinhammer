@@ -444,6 +444,10 @@ input:focus-visible{
     ⏳ Withdrawal requests are sent for admin approval.
   </div>
 </section>
+  <section class="panel" id="activity">
+  <h3>📋 Recent Activity</h3>
+  <div id="activityList" class="muted">Loading activity...</div>
+  </section>
 <section class="panel" id="output"></section>
 <div class="notice" id="notice" aria-live="polite"></div>
 </main>
@@ -478,6 +482,29 @@ async function claimReferral(){
     console.log("Referral claim skipped",e);
   }
 }
+  async function loadActivities(){
+  try{
+    const r=await fetch(api+"/api/activities/"+encodeURIComponent(id));
+    const items=await r.json();
+
+    if(!items.length){
+      $("activityList").innerHTML="No recent activity yet.";
+      return;
+    }
+
+    $("activityList").innerHTML=items.map(x=>`
+      <div class="card" style="margin-top:10px;">
+        <div class="title">${x.description||x.type}</div>
+        <div class="muted">
+          ${x.amount>0?"+"+x.amount+" coins":""}
+          ${x.status? " • "+x.status:""}
+        </div>
+      </div>
+    `).join("");
+  }catch(e){
+    $("activityList").textContent="Unable to load activity.";
+  }
+  }
   $("earn").onclick=async()=>{$("earn").disabled=true;$("timer").textContent="Opening rewarded ad...";try{const result=await AdController.show();if(!result?.done){$("timer").textContent="Ad not completed — no reward";return}const j=await post("/api/earn",{id});balance=j.balance;render();$("timer").textContent="+100 coins"}catch(e){$("notice").textContent=e.message;setTimeout(()=>$("notice").textContent="",3000)}finally{$("earn").disabled=false}}
 $("daily").onclick=async()=>{$("output").classList.remove("show");$("output").style.display="none";try{const j=await post("/api/daily",{id});balance=j.balance;render();$("notice").textContent="+250 daily bonus";setTimeout(()=>$("notice").textContent="",3000)}catch(e){$("notice").textContent=e.message;setTimeout(()=>$("notice").textContent="",3000)}}
 $("invite").onclick=async()=>{try{const j=await (await fetch(api+"/api/referral/"+encodeURIComponent(id))).json();$("output").classList.add("show");$("output").innerHTML="<h3>👥 Your Referral Link</h3><div class='muted' id='refLink'>"+j.link+"</div><button id='copyRef' style='margin-top:12px;width:100%'>📋 Copy Referral Link</button>";$("copyRef").onclick=async()=>{await navigator.clipboard.writeText(j.link);$("copyRef").textContent="✅ Copied!"}}catch(e){$("notice").textContent=e.message}}
@@ -586,6 +613,7 @@ $("bankWithdraw").onclick=()=>submitWithdrawal("bank");
 $("upiWithdraw").onclick=()=>submitWithdrawal("upi");
 $("leader").onclick=async()=>{try{const list=await (await fetch(api+"/api/leaderboard")).json();$("output").classList.add("show");$("output").innerHTML="<h3>🏆 Leaderboard</h3>"+list.map((u,i)=>"<div>"+(i+1)+". "+(u.username||"User")+" — "+u.balance.toLocaleString()+"</div>").join("")}catch(e){$("notice").textContent=e.message}}
 load();
+  loadActivities();
   claimReferral();
   </script>
 </body></html>
