@@ -196,7 +196,22 @@ app.get("/api/referral/:id", (req,res) => {
     link:`https://t.me/${bot}/coinhammer?startapp=${encodeURIComponent(req.params.id)}`
   });
 });
+app.get("/api/activities/:id", async (req,res) => {
+  try {
+    const result = await pool.query(
+      `SELECT type, amount, description, status, created_at
+       FROM activities
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT 20`,
+      [String(req.params.id)]
+    );
 
+    res.json(result.rows);
+  } catch(e) {
+    res.status(500).json({error:e.message});
+  }
+});
 app.post("/api/referral/claim", async (req,res) => {
   const referrerId = String(req.body.referrerId || "");
   const referredId = String(req.body.referredId || "");
