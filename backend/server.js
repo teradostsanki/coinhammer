@@ -234,6 +234,7 @@ app.post("/api/referral/claim", async (req,res) => {
       [referredId]
     );
 
+    console.log("REFERRAL ROW:", referral.rows[0]);
     let rewardGiven = false;
 
     if (
