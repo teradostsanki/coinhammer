@@ -200,6 +200,7 @@ app.get("/api/referral/:id", (req,res) => {
 app.post("/api/referral/claim", async (req,res) => {
   const referrerId = String(req.body.referrerId || "");
   const referredId = String(req.body.referredId || "");
+  console.log("REFERRAL CLAIM:", { referrerId, referredId });
 
   if (!referrerId || !referredId) {
     return res.status(400).json({error:"Missing referral data"});
