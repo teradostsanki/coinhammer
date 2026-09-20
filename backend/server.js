@@ -129,12 +129,19 @@ app.post("/api/earn", async (req,res) => {
       });
     }
 
-    res.json({
-      ok:true,
-      reward:100,
-      balance:updated.rows[0].balance,
-      dailyEarnCount:updated.rows[0].daily_earn_count
-    });
+    await pool.query(
+  `INSERT INTO activities
+   (user_id, type, amount, description, status)
+   VALUES ($1, $2, $3, $4, $5)`,
+  [id, "ad", 100, "Rewarded ad earning", "completed"]
+);
+
+res.json({
+  ok:true,
+  reward:100,
+  balance:updated.rows[0].balance,
+  dailyEarnCount:updated.rows[0].daily_earn_count
+});
   } catch(e) {
     res.status(500).json({error:e.message});
   }
@@ -165,11 +172,18 @@ app.post("/api/daily", async (req,res) => {
       });
     }
 
-    res.json({
-      ok:true,
-      reward:250,
-      balance:updated.rows[0].balance
-    });
+    await pool.query(
+  `INSERT INTO activities
+   (user_id, type, amount, description, status)
+   VALUES ($1, $2, $3, $4, $5)`,
+  [id, "daily", 250, "Daily bonus", "completed"]
+);
+
+res.json({
+  ok:true,
+  reward:250,
+  balance:updated.rows[0].balance
+});
 
   } catch(e) {
     res.status(500).json({error:e.message});
