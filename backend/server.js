@@ -601,7 +601,35 @@ app.get("/api/leaderboard", async (req,res) => {
   );
   res.json(result.rows);
 });
+app.get("/api/admin/stats", async (req, res) => {
+  try {
+    const users = await pool.query(`
+      SELECT
+        COUNT(*)::int AS total_users,
+        COALESCE(SUM(balance), 0)::int AS total_coins
+      FROM users
+    `);
 
+    const withdrawals = await pool.query(`
+      SELECT
+        COUNT(*)::int AS total_withdrawals,
+        COUNT(*) FILTER (WHERE status = 'pending')::int AS pending_withdrawals,
+        COALESCE(SUM(amount), 0)::numeric AS total_withdrawal_amount
+      FROM withdrawals
+    `);
+
+    res.json({
+      total_users: users.rows[0].total_users,
+      total_coins: users.rows[0].total_coins,
+      total_withdrawals: withdrawals.rows[0].total_withdrawals,
+      pending_withdrawals: withdrawals.rows[0].pending_withdrawals,
+      total_withdrawal_amount: withdrawals.rows[0].total_withdrawal_amount
+    });
+  } catch (e) {
+    console.error("ADMIN STATS ERROR:", e);
+    res.status(500).json({ error: "Failed to load admin stats" });
+  }
+});
 app.get("/", (req, res) => {
   res.sendFile("frontend/index.html", { root: process.cwd() });
 });
