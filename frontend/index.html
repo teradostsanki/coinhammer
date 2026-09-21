@@ -477,6 +477,27 @@ input:focus-visible{
 <section class="panel" id="output"></section>
 <div class="notice" id="notice" aria-live="polite"></div>
 </main>
+  <nav class="bottom-nav">
+  <button onclick="goHome()">
+    <span>⌂</span>
+    <small>Home</small>
+  </button>
+
+  <button onclick="goTasks()">
+    <span>✓</span>
+    <small>Tasks</small>
+  </button>
+
+  <button onclick="goReferrals()">
+    <span>👥</span>
+    <small>Referrals</small>
+  </button>
+
+  <button onclick="goMine()">
+    <span>⚙</span>
+    <small>Mine</small>
+  </button>
+  </nav>
 <script>
 const tg=window.Telegram?.WebApp;
 if(tg){tg.ready();tg.expand();}
