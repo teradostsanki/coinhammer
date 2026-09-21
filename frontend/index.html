@@ -438,7 +438,10 @@ input:focus-visible{
 </button></div>
 <section class="panel" id="wallet">
   <h3>💰 Withdraw</h3>
-
+<button type="button" onclick="goMine()" style="margin-bottom:15px;">
+  ← Back to Mine
+</button>
+  
   <div class="muted">
     Minimum withdrawal ₹10 • Maximum 2 withdrawals per day
   </div>
@@ -557,9 +560,7 @@ function goReferrals(){
   window.scrollTo({top:0,behavior:"smooth"});
 }
 function showWallet(){
-  $("output").style.display="block";
-  $("output").classList.add("show");
-  $("output").innerHTML=`<button onclick="goMine()" style="margin-bottom:15px;">← Back to Mine</button>`;
+  
 
   $("wallet").style.display="block";
   $("wallet").classList.add("show");
