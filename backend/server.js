@@ -670,6 +670,7 @@ async function handleMasterMessage(message) {
   const chatId = String(message.chat.id);
   const text = message.text.trim();
 
+  console.log("MASTER BOT CHAT ID:", chatId);
   if (chatId !== MASTER_ADMIN_ID) {
     await masterSend(chatId, "⛔ Unauthorized access.");
     return;
