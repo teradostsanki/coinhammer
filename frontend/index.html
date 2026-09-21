@@ -673,18 +673,102 @@ function filterHistory(type){
     return;
   }
 
-  $("historyList").innerHTML = items.map(x=>`
-    <div class="card" style="margin-top:10px;">
-      <div class="title">${x.description||x.type}</div>
-      <div class="muted">
-        ${x.amount>0 ? "+"+x.amount+" coins" : ""}
-        ${x.status ? " • "+x.status : ""}
+$("historyList").innerHTML = items.map(x=>{
+
+  const t = String(x.type||"").toLowerCase();
+
+  let icon = "📋";
+  let label = "Activity";
+
+  if(t.includes("task")){
+    icon = "🎯";
+    label = "Task reward";
+  }else if(t.includes("earn") || t.includes("ad")){
+    icon = "💰";
+    label = "Earning";
+  }else if(t.includes("bonus")){
+    icon = "🎁";
+    label = "Daily bonus";
+  }else if(t.includes("refer")){
+    icon = "👥";
+    label = "Referral reward";
+  }else if(t.includes("withdraw")){
+    icon = "💸";
+    label = "Withdrawal";
+  }
+
+  const date = new Date(x.created_at);
+  const today = new Date();
+
+  let dateText = date.toLocaleDateString();
+  if(date.toDateString() === today.toDateString()){
+    dateText = "Today";
+  }
+
+  const amountText =
+    x.amount > 0
+      ? "+" + x.amount + " coins"
+      : x.amount < 0
+        ? x.amount + " coins"
+        : "";
+
+  const statusText = x.status
+    ? x.status.charAt(0).toUpperCase()+x.status.slice(1)
+    : "Completed";
+
+  return `
+    <div class="card" style="
+      margin-top:10px;
+      padding:15px;
+      display:flex;
+      align-items:center;
+      gap:12px;
+    ">
+
+      <div style="
+        width:46px;
+        height:46px;
+        border-radius:14px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        background:rgba(255,193,7,.12);
+        font-size:23px;
+        flex-shrink:0;
+      ">
+        ${icon}
       </div>
-      <div class="muted">
-        ${new Date(x.created_at).toLocaleString()}
+
+      <div style="flex:1;min-width:0;">
+        <div class="title">${x.description||label}</div>
+
+        <div class="muted" style="margin-top:4px;">
+          ${dateText} • ${date.toLocaleTimeString([],{
+            hour:"2-digit",
+            minute:"2-digit"
+          })}
+        </div>
       </div>
+
+      <div style="text-align:right;white-space:nowrap;">
+        <div style="
+          font-weight:800;
+          color:${x.amount < 0 ? "#ff8a80" : "#7cff9b"};
+        ">
+          ${amountText}
+        </div>
+
+        <div class="muted" style="
+          font-size:12px;
+          margin-top:4px;
+        ">
+          ${statusText}
+        </div>
+      </div>
+
     </div>
-  `).join("");
+  `;
+}).join("");
 }
 
 function renderHistory(type){
