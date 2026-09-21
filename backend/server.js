@@ -602,6 +602,10 @@ app.get("/api/leaderboard", async (req,res) => {
   res.json(result.rows);
 });
 app.get("/api/admin/stats", async (req, res) => {
+  if (req.headers["x-admin-key"] !== process.env.ADMIN_KEY) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
   try {
     const users = await pool.query(`
       SELECT
