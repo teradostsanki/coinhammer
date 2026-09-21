@@ -500,6 +500,58 @@ input:focus-visible{
   </nav>
 <script>
 const tg=window.Telegram?.WebApp;
+  function goHome(){
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+function goTasks(){
+  $("tasks").click();
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+function goReferrals(){
+  $("invite").click();
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+function goMine(){
+  $("output").classList.add("show");
+  $("output").style.display="block";
+
+  $("output").innerHTML=`
+    <h2>⚙️ Mine</h2>
+
+    <div class="card" onclick="showWallet()">
+      💳 <b>Wallet</b>
+      <div class="muted">Manage your withdrawal wallet</div>
+    </div>
+
+    <div class="card" onclick="showHistory()">
+      📜 <b>Transaction History</b>
+      <div class="muted">View earnings and withdrawals</div>
+    </div>
+
+    <div class="card" onclick="showInvite()">
+      👥 <b>Invite Friends</b>
+      <div class="muted">Share your referral link</div>
+    </div>
+
+    <div class="card">
+      🔔 <b>Notifications</b>
+      <div class="muted">Manage alerts</div>
+    </div>
+
+    <div class="card">
+      ❓ <b>Help & Support</b>
+      <div class="muted">Get help with CoinHammer</div>
+    </div>
+
+    <div class="card">
+      ℹ️ <b>About</b>
+      <div class="muted">CoinHammer • Version 1.0</div>
+    </div>
+  `;
+}
 if(tg){tg.ready();tg.expand();}
 const api="https://coinhammer.onrender.com";
 let AdController=null;
