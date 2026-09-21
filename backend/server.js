@@ -637,6 +637,128 @@ app.get("/api/admin/stats", async (req, res) => {
 app.get("/", (req, res) => {
   res.sendFile("frontend/index.html", { root: process.cwd() });
 });
+// ================= MASTER ADMIN BOT =================
+
+const MASTER_BOT_TOKEN = process.env.MASTER_BOT_TOKEN;
+const MASTER_ADMIN_ID = String(process.env.MASTER_ADMIN_ID || "");
+
+let masterBotOffset = 0;
+
+async function masterTelegram(method, body = {}) {
+  const response = await fetch(
+    `https://api.telegram.org/bot${MASTER_BOT_TOKEN}/${method}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    }
+  );
+
+  return response.json();
+}
+
+async function masterSend(chatId, text) {
+  return masterTelegram("sendMessage", {
+    chat_id: chatId,
+    text: text
+  });
+}
+
+async function handleMasterMessage(message) {
+  if (!message || !message.text) return;
+
+  const chatId = String(message.chat.id);
+  const text = message.text.trim();
+
+  if (chatId !== MASTER_ADMIN_ID) {
+    await masterSend(chatId, "⛔ Unauthorized access.");
+    return;
+  }
+
+  if (text === "/start") {
+    await masterSend(
+      chatId,
+      "🔐 CoinHammer Master Admin Bot\\n\\n" +
+      "Welcome Admin!\\n\\n" +
+      "Available command:\\n" +
+      "/stats - View bot statistics"
+    );
+    return;
+  }
+
+  if (text === "/stats") {
+    try {
+      const users = await pool.query(`
+        SELECT
+          COUNT(*)::int AS total_users,
+          COALESCE(SUM(balance), 0)::int AS total_coins
+        FROM users
+      `);
+
+      const withdrawals = await pool.query(`
+        SELECT
+          COUNT(*)::int AS total_withdrawals,
+          COUNT(*) FILTER (WHERE status = 'pending')::int AS pending_withdrawals,
+          COALESCE(SUM(amount), 0)::numeric AS total_withdrawal_amount
+        FROM withdrawals
+      `);
+
+      const u = users.rows[0];
+      const w = withdrawals.rows[0];
+
+      await masterSend(
+        chatId,
+        "📊 CoinHammer Statistics\\n\\n" +
+        `👥 Total Users: ${u.total_users}\\n` +
+        `🪙 Total Coins: ${u.total_coins}\\n` +
+        `💸 Total Withdrawals: ${w.total_withdrawals}\\n` +
+        `⏳ Pending Withdrawals: ${w.pending_withdrawals}\\n` +
+        `💰 Withdrawal Amount: ₹${w.total_withdrawal_amount}`
+      );
+    } catch (error) {
+      console.error("MASTER BOT STATS ERROR:", error);
+      await masterSend(chatId, "❌ Failed to load statistics.");
+    }
+    return;
+  }
+
+  await masterSend(
+    chatId,
+    "❓ Unknown command.\\n\\nUse /stats"
+  );
+}
+
+async function masterBotLoop() {
+  if (!MASTER_BOT_TOKEN || !MASTER_ADMIN_ID) {
+    console.log("Master Admin Bot variables are missing.");
+    return;
+  }
+
+  try {
+    const result = await masterTelegram("getUpdates", {
+      offset: masterBotOffset,
+      timeout: 20,
+      allowed_updates: ["message"]
+    });
+
+    if (result.ok && result.result) {
+      for (const update of result.result) {
+        masterBotOffset = update.update_id + 1;
+
+        if (update.message) {
+          await handleMasterMessage(update.message);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("MASTER BOT ERROR:", error.message);
+  }
+
+  setTimeout(masterBotLoop, 1000);
+}
+
+// ================= END MASTER ADMIN BOT =================
 app.listen(process.env.PORT || 3000, () => {
   console.log(`CoinHammer backend running on port ${process.env.PORT || 3000}`);
 });
+masterBotLoop();
