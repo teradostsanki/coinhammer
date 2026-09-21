@@ -560,7 +560,9 @@ function goReferrals(){
   window.scrollTo({top:0,behavior:"smooth"});
 }
 function showWallet(){
-  
+  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
+    el.style.display="none";
+  });
 
   $("wallet").style.display="block";
   $("wallet").classList.add("show");
