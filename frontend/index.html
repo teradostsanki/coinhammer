@@ -791,13 +791,18 @@ load();
   let historyItems = [];
 
 async function showHistory(){
-  try{
-    const r = await fetch(api+"/api/activities/"+encodeURIComponent(id));
-    historyItems = await r.json();
+  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
+    el.style.display="none";
+  });
 
-    $("history").classList.add("show");
-$("history").style.display="block";
-renderHistory("all");
+  $("output").style.display="none";
+  $("history").style.display="block";
+  $("history").classList.add("show");
+
+  try{
+    const r=await fetch(api+"/api/activities/"+encodeURIComponent(id));
+    historyItems=await r.json();
+    renderHistory("all");
   }catch(e){
     $("historyList").textContent="Unable to load history.";
   }
