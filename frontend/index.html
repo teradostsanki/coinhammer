@@ -585,6 +585,7 @@ function showInvite(){
   `;
   }
   function showHelp(){
+    
   document.querySelectorAll("main > section, main > .grid").forEach(el=>{
     el.style.display="none";
   });
@@ -608,6 +609,33 @@ function showInvite(){
     </div>
   `;
   }
+function showAbout(){
+  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
+    el.style.display="none";
+  });
+
+  $("output").style.display="block";
+  $("output").classList.add("show");
+
+  $("output").innerHTML=`
+    <h2>ℹ️ About CoinHammer</h2>
+
+    <div class="card">
+      <b>CoinHammer</b>
+      <div class="muted">Earn coins by completing tasks, daily bonuses and other activities.</div>
+    </div>
+
+    <div class="card">
+      <b>Version</b>
+      <div class="muted">CoinHammer • Version 1.0</div>
+    </div>
+
+    <div class="card">
+      <b>💰 Coin Value</b>
+      <div class="muted">100 coins = ₹1</div>
+    </div>
+  `;
+}
   
 function goMine(){
   document.querySelectorAll("main > section, main > .grid").forEach(el=>{
