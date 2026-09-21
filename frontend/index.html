@@ -518,7 +518,7 @@ async function claimReferral(){
       return;
     }
 
-    $("activityList").innerHTML=items.map(x=>`
+    $("activityList").innerHTML=items.slice(0,3).map(x=>
       <div class="card" style="margin-top:10px;">
         <div class="title">${x.description||x.type}</div>
         <div class="muted">
