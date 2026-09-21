@@ -722,7 +722,46 @@ async function handleMasterMessage(message) {
     }
     return;
   }
+if (text === "/withdrawals") {
+  try {
+    const result = await pool.query(`
+      SELECT id, user_id, method, account_holder_name,
+             account_number, ifsc, upi_id, amount,
+             status, created_at
+      FROM withdrawals
+      WHERE status = 'pending'
+      ORDER BY created_at ASC
+      LIMIT 10
+    `);
 
+    if (!result.rows.length) {
+      await masterSend(chatId, "✅ No pending withdrawals.");
+      return;
+    }
+
+    let msg = "💸 Pending Withdrawals\n\n";
+
+    for (const w of result.rows) {
+      msg +=
+        `🆔 ID: ${w.id}\n` +
+        `👤 User: ${w.user_id}\n` +
+        `💰 Amount: ₹${w.amount}\n` +
+        `🏦 Method: ${w.method}\n` +
+        (w.upi_id ? `📱 UPI: ${w.upi_id}\n` : "") +
+        (w.account_number ? `🏦 Account: ${w.account_number}\n` : "") +
+        (w.ifsc ? `🔑 IFSC: ${w.ifsc}\n` : "") +
+        `📅 ${w.created_at}\n` +
+        `━━━━━━━━━━━━━━\n`;
+    }
+
+    await masterSend(chatId, msg);
+  } catch (error) {
+    console.error("MASTER BOT WITHDRAWALS ERROR:", error);
+    await masterSend(chatId, "❌ Failed to load withdrawals.");
+  }
+
+  return;
+}
   await masterSend(
     chatId,
     "❓ Unknown command.\\n\\nUse /stats"
