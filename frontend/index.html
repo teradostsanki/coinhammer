@@ -445,9 +445,35 @@ input:focus-visible{
   </div>
 </section>
   <section class="panel show" id="activity">
-  <h3>📋 Recent Activity</h3>
-  <div id="activityList" class="muted">Loading activity...</div>
-  </section>
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+    <h3 style="margin:0;">📋 Recent Activity</h3>
+
+    <button
+      onclick="showHistory()"
+      style="padding:8px 14px;border-radius:20px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font-weight:700;">
+      See all
+    </button>
+  </div>
+
+  <div id="activityList" class="muted" style="margin-top:14px;">
+    Loading activity...
+  </div>
+</section>
+
+<section class="panel" id="history">
+  <h3>📜 History</h3>
+
+  <div style="display:flex;gap:8px;overflow-x:auto;margin:12px 0;">
+    <button onclick="filterHistory('all')">All</button>
+    <button onclick="filterHistory('earning')">Earnings</button>
+    <button onclick="filterHistory('task')">Tasks</button>
+    <button onclick="filterHistory('withdrawal')">Withdrawals</button>
+  </div>
+
+  <div id="historyList" class="muted">
+    Loading history...
+  </div>
+</section>
 <section class="panel" id="output"></section>
 <div class="notice" id="notice" aria-live="polite"></div>
 </main>
@@ -614,6 +640,56 @@ $("upiWithdraw").onclick=()=>submitWithdrawal("upi");
 $("leader").onclick=async()=>{try{const list=await (await fetch(api+"/api/leaderboard")).json();$("output").classList.add("show");$("output").innerHTML="<h3>🏆 Leaderboard</h3>"+list.map((u,i)=>"<div>"+(i+1)+". "+(u.username||"User")+" — "+u.balance.toLocaleString()+"</div>").join("")}catch(e){$("notice").textContent=e.message}}
 load();
   loadActivities();
+  let historyItems = [];
+
+async function showHistory(){
+  try{
+    const r = await fetch(api+"/api/activities/"+encodeURIComponent(id));
+    historyItems = await r.json();
+
+    $("history").classList.add("show");
+    renderHistory("all");
+  }catch(e){
+    $("historyList").textContent="Unable to load history.";
+  }
+}
+
+function filterHistory(type){
+  let items = historyItems;
+
+  if(type !== "all"){
+    items = historyItems.filter(x=>{
+      const t = String(x.type||"").toLowerCase();
+
+      if(type==="task") return t.includes("task");
+      if(type==="earning") return t.includes("earn") || t.includes("bonus") || t.includes("ad");
+      if(type==="withdrawal") return t.includes("withdraw");
+      return true;
+    });
+  }
+
+  if(!items.length){
+    $("historyList").innerHTML="No history found.";
+    return;
+  }
+
+  $("historyList").innerHTML = items.map(x=>`
+    <div class="card" style="margin-top:10px;">
+      <div class="title">${x.description||x.type}</div>
+      <div class="muted">
+        ${x.amount>0 ? "+"+x.amount+" coins" : ""}
+        ${x.status ? " • "+x.status : ""}
+      </div>
+      <div class="muted">
+        ${new Date(x.created_at).toLocaleString()}
+      </div>
+    </div>
+  `).join("");
+}
+
+function renderHistory(type){
+  filterHistory(type);
+}
   claimReferral();
   </script>
 </body></html>
