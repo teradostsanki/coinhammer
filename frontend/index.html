@@ -354,6 +354,49 @@ input:focus-visible{
   color:var(--muted);
   font-weight:700;
 }  
+  .bottom-nav{
+  position:fixed;
+  left:12px;
+  right:12px;
+  bottom:12px;
+  z-index:9999;
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:6px;
+  padding:8px;
+  background:rgba(15,23,42,.96);
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:22px;
+  box-shadow:0 12px 35px rgba(0,0,0,.45);
+  backdrop-filter:blur(14px);
+}
+
+.bottom-nav button{
+  border:0;
+  background:transparent;
+  color:#94a3b8;
+  border-radius:16px;
+  padding:9px 4px;
+  cursor:pointer;
+  font-weight:700;
+}
+
+.bottom-nav button:hover{
+  background:rgba(255,255,255,.08);
+  color:#fff;
+}
+
+.bottom-nav span{
+  display:block;
+  font-size:22px;
+  line-height:24px;
+}
+
+.bottom-nav small{
+  display:block;
+  margin-top:3px;
+  font-size:11px;
+}
 </style>
 </head>
 <body><main>
