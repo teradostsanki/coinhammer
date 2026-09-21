@@ -558,8 +558,12 @@ function goReferrals(){
 }
 
 function goMine(){
-  $("output").classList.add("show");
+  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
+    el.style.display="none";
+  });
+
   $("output").style.display="block";
+  $("output").classList.add("show");
 
   $("output").innerHTML=`
     <h2>⚙️ Mine</h2>
