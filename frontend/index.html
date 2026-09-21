@@ -557,7 +557,10 @@ function goReferrals(){
   window.scrollTo({top:0,behavior:"smooth"});
 }
 function showWallet(){
-  $("output").style.display="none";
+  $("output").style.display="block";
+  $("output").classList.add("show");
+  $("output").innerHTML=`<button onclick="goMine()" style="margin-bottom:15px;">← Back to Mine</button>`;
+
   $("wallet").style.display="block";
   $("wallet").classList.add("show");
 
