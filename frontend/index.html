@@ -556,7 +556,16 @@ function goReferrals(){
   $("invite").click();
   window.scrollTo({top:0,behavior:"smooth"});
 }
+function showWallet(){
+  $("output").style.display="none";
+  $("wallet").classList.add("show");
+  $("wallet").scrollIntoView({behavior:"smooth"});
+}
 
+function showInvite(){
+  $("invite").click();
+}
+  
 function goMine(){
   document.querySelectorAll("main > section, main > .grid").forEach(el=>{
     el.style.display="none";
