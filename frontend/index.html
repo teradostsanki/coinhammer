@@ -567,6 +567,23 @@ function showWallet(){
 function showInvite(){
   $("invite").click();
 }
+  function showNotifications(){
+  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
+    el.style.display="none";
+  });
+
+  $("output").style.display="block";
+  $("output").classList.add("show");
+
+  $("output").innerHTML=`
+    <h2>🔔 Notifications</h2>
+
+    <div class="card">
+      <b>No new notifications</b>
+      <div class="muted">You're all caught up.</div>
+    </div>
+  `;
+  }
   
 function goMine(){
   document.querySelectorAll("main > section, main > .grid").forEach(el=>{
@@ -594,7 +611,7 @@ function goMine(){
       <div class="muted">Share your referral link</div>
     </div>
 
-    <div class="card">
+    <div class="card" onclick="showNotifications()">
       🔔 <b>Notifications</b>
       <div class="muted">Manage alerts</div>
     </div>
@@ -779,7 +796,8 @@ async function showHistory(){
     historyItems = await r.json();
 
     $("history").classList.add("show");
-    renderHistory("all");
+$("history").style.display="block";
+renderHistory("all");
   }catch(e){
     $("historyList").textContent="Unable to load history.";
   }
