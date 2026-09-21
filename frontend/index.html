@@ -584,6 +584,30 @@ function showInvite(){
     </div>
   `;
   }
+  function showHelp(){
+  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
+    el.style.display="none";
+  });
+
+  $("output").style.display="block";
+  $("output").classList.add("show");
+
+  $("output").innerHTML=`
+    <h2>❓ Help & Support</h2>
+
+    <div class="card">
+      <b>Need help?</b>
+      <div class="muted">For CoinHammer support, please contact the admin.</div>
+    </div>
+
+    <div class="card">
+      <b>Common Issues</b>
+      <div class="muted">
+        If a task or withdrawal is not working, please try again later.
+      </div>
+    </div>
+  `;
+  }
   
 function goMine(){
   document.querySelectorAll("main > section, main > .grid").forEach(el=>{
@@ -616,7 +640,7 @@ function goMine(){
       <div class="muted">Manage alerts</div>
     </div>
 
-    <div class="card">
+    <div class="card" onclick="showHelp()">
       ❓ <b>Help & Support</b>
       <div class="muted">Get help with CoinHammer</div>
     </div>
