@@ -762,6 +762,119 @@ if (text === "/withdrawals") {
 
   return;
 }
+      if (text.startsWith("/approve ")) {
+      const withdrawalId = text.split(" ")[1];
+
+      try {
+        const result = await pool.query(`
+          UPDATE withdrawals
+          SET status = 'approved',
+              admin_note = 'Approved by admin',
+              processed_at = CURRENT_TIMESTAMP
+          WHERE id = $1
+            AND status = 'pending'
+          RETURNING id, user_id, amount
+        `, [withdrawalId]);
+
+        if (!result.rows.length) {
+          await masterSend(
+            chatId,
+            "❌ Withdrawal not found or already processed."
+          );
+          return;
+        }
+
+        const w = result.rows[0];
+
+        await pool.query(`
+          INSERT INTO activities (user_id, type, amount, description, status)
+          VALUES ($1, 'withdrawal', 0, $2, 'approved')
+        `, [
+          w.user_id,
+          `Withdrawal ₹${w.amount} approved`
+        ]);
+
+        await masterSend(
+          chatId,
+          `✅ Withdrawal Approved\n\n` +
+          `🆔 ID: ${w.id}\n` +
+          `👤 User: ${w.user_id}\n` +
+          `💰 Amount: ₹${w.amount}`
+        );
+
+      } catch (error) {
+        console.error("APPROVE WITHDRAWAL ERROR:", error);
+        await masterSend(chatId, "❌ Failed to approve withdrawal.");
+      }
+
+      return;
+    }
+
+    if (text.startsWith("/reject ")) {
+      const withdrawalId = text.split(" ")[1];
+      const client = await pool.connect();
+
+      try {
+        await client.query("BEGIN");
+
+        const result = await client.query(`
+          UPDATE withdrawals
+          SET status = 'rejected',
+              admin_note = 'Rejected by admin',
+              processed_at = CURRENT_TIMESTAMP
+          WHERE id = $1
+            AND status = 'pending'
+          RETURNING id, user_id, amount
+        `, [withdrawalId]);
+
+        if (!result.rows.length) {
+          await client.query("ROLLBACK");
+          await masterSend(
+            chatId,
+            "❌ Withdrawal not found or already processed."
+          );
+          return;
+        }
+
+        const w = result.rows[0];
+        const refundCoins = Math.round(Number(w.amount) * 100);
+
+        await client.query(`
+          UPDATE users
+          SET balance = balance + $1
+          WHERE id = $2
+        `, [refundCoins, w.user_id]);
+
+        await client.query(`
+          INSERT INTO activities (user_id, type, amount, description, status)
+          VALUES ($1, 'withdrawal', $2, $3, 'rejected')
+        `, [
+          w.user_id,
+          refundCoins,
+          `Withdrawal ₹${w.amount} rejected - coins refunded`
+        ]);
+
+        await client.query("COMMIT");
+
+        await masterSend(
+          chatId,
+          `❌ Withdrawal Rejected\n\n` +
+          `🆔 ID: ${w.id}\n` +
+          `👤 User: ${w.user_id}\n` +
+          `💰 Amount: ₹${w.amount}\n` +
+          `🪙 Refunded: ${refundCoins} coins`
+        );
+
+      } catch (error) {
+        await client.query("ROLLBACK");
+        console.error("REJECT WITHDRAWAL ERROR:", error);
+        await masterSend(chatId, "❌ Failed to reject withdrawal.");
+      } finally {
+        client.release();
+      }
+
+      return;
+    }
   await masterSend(
     chatId,
     "❓ Unknown command.\\n\\nUse /stats"
