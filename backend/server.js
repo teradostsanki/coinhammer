@@ -657,11 +657,17 @@ async function masterTelegram(method, body = {}) {
   return response.json();
 }
 
-async function masterSend(chatId, text) {
-  return masterTelegram("sendMessage", {
+async function masterSend(chatId, text, replyMarkup = null) {
+  const body = {
     chat_id: chatId,
     text: text
-  });
+  };
+
+  if (replyMarkup) {
+    body.reply_markup = replyMarkup;
+  }
+
+  return masterTelegram("sendMessage", body);
 }
 
 async function handleMasterMessage(message) {
