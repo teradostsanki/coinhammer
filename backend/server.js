@@ -679,10 +679,10 @@ async function handleMasterMessage(message) {
   if (text === "/start") {
     await masterSend(
       chatId,
-      "🔐 CoinHammer Master Admin Bot\\n\\n" +
-      "Welcome Admin!\\n\\n" +
-      "Available command:\\n" +
-      "/stats - View bot statistics"
+      "🔐 CoinHammer Master Admin Bot\n\n" +
+"Welcome Admin!\n\n" +
+"Available command:\n" +
+"/stats - View bot statistics"
     );
     return;
   }
