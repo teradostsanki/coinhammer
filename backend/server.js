@@ -708,14 +708,14 @@ async function handleMasterMessage(message) {
       const w = withdrawals.rows[0];
 
       await masterSend(
-        chatId,
-        "📊 CoinHammer Statistics\\n\\n" +
-        `👥 Total Users: ${u.total_users}\\n` +
-        `🪙 Total Coins: ${u.total_coins}\\n` +
-        `💸 Total Withdrawals: ${w.total_withdrawals}\\n` +
-        `⏳ Pending Withdrawals: ${w.pending_withdrawals}\\n` +
-        `💰 Withdrawal Amount: ₹${w.total_withdrawal_amount}`
-      );
+  chatId,
+  "📊 CoinHammer Statistics\n\n" +
+  `👥 Total Users: ${u.total_users}\n` +
+  `🪙 Total Coins: ${u.total_coins}\n` +
+  `💸 Total Withdrawals: ${w.total_withdrawals}\n` +
+  `⏳ Pending Withdrawals: ${w.pending_withdrawals}\n` +
+  `💰 Withdrawal Amount: ₹${w.total_withdrawal_amount}`
+);
     } catch (error) {
       console.error("MASTER BOT STATS ERROR:", error);
       await masterSend(chatId, "❌ Failed to load statistics.");
