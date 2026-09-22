@@ -908,7 +908,7 @@ async function masterBotLoop() {
     const result = await masterTelegram("getUpdates", {
       offset: masterBotOffset,
       timeout: 20,
-      allowed_updates: ["message"]
+      allowed_updates: ["message", "callback_query"]
     });
 
     if (result.ok && result.result) {
@@ -918,6 +918,39 @@ async function masterBotLoop() {
         if (update.message) {
           await handleMasterMessage(update.message);
         }
+                if (update.callback_query) {
+          const callback = update.callback_query;
+          const callbackChatId = String(callback.message.chat.id);
+          const data = callback.data || "";
+
+          if (data.startsWith("approve_")) {
+            const withdrawalId = data.split("_")[1];
+
+            await handleMasterMessage({
+              chat: { id: callbackChatId },
+              text: `/approve ${withdrawalId}`
+            });
+
+            await masterTelegram("answerCallbackQuery", {
+              callback_query_id: callback.id,
+              text: "Withdrawal approved"
+            });
+          }
+
+          if (data.startsWith("reject_")) {
+            const withdrawalId = data.split("_")[1];
+
+            await handleMasterMessage({
+              chat: { id: callbackChatId },
+              text: `/reject ${withdrawalId}`
+            });
+
+            await masterTelegram("answerCallbackQuery", {
+              callback_query_id: callback.id,
+              text: "Withdrawal rejected"
+            });
+          }
+                }
       }
     }
   } catch (error) {
