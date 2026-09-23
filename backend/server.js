@@ -532,7 +532,7 @@ app.post("/api/withdraw", async (req,res) => {
       `SELECT COUNT(*)::int AS count
        FROM withdrawals
        WHERE user_id = $1
-       AND created_at::date = CURRENT_DATE`,
+       AND (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
       [id]
     );
 
