@@ -735,7 +735,8 @@ async function handleMasterMessage(message) {
   if (text === "/users") {
   try {
     const result = await pool.query(`
-      SELECT id, username, balance, tasks_completed
+      SELECT id, username, balance,
+tasks_completed, last_daily
       FROM users
       ORDER BY id DESC
       LIMIT 20
@@ -753,7 +754,8 @@ async function handleMasterMessage(message) {
         `🆔 ${u.id}\n` +
         `👤 ${u.username || "No username"}\n` +
         `🪙 ${u.balance} coins\n` +
-        `✅ Tasks: ${u.tasks_completed}\n\n`;
+        `✅ Tasks: ${u.tasks_completed}\n` +
+`📅 Daily: ${u.last_daily || "Not claimed"}\n\n`;
     }
 
     await masterSend(chatId, msg);
