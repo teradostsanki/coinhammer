@@ -576,7 +576,28 @@ app.post("/api/withdraw", async (req,res) => {
     );
 
     await client.query("COMMIT");
-    
+  await masterSend(
+  process.env.MASTER_ADMIN_ID,
+  `🚨 New Withdrawal Request\n\n` +
+  `🆔 ID: ${withdrawal.rows[0].id}\n` +
+  `👤 User: ${id}\n` +
+  `💰 Amount: ₹${amount}\n` +
+  `💳 Method: ${method.toUpperCase()}\n` +
+  `${method === "upi"
+    ? `📱 UPI: ${upiId}`
+    : `🏦 Account: ${accountNumber}\n🏦 IFSC: ${ifsc}\n👤 Holder: ${accountHolderName}`}\n` +
+  `⏳ Status: Pending`,
+  {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "✅ Approve", callback_data: `approve_${withdrawal.rows[0].id}` },
+          { text: "❌ Reject", callback_data: `reject_${withdrawal.rows[0].id}` }
+        ]
+      ]
+    }
+  }
+);  
 
     res.json({
       ok: true,
