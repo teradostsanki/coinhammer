@@ -90,7 +90,9 @@ async function getUser(id, username="DemoUser") {
 
   return created.rows[0];
 }
-
+app.get("/health", (req,res) => {
+  res.send("OK");
+});
 app.get("/api/user/:id", async (req,res) => {
   const u = await getUser(String(req.params.id));
   res.json(u);
