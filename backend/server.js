@@ -520,7 +520,21 @@ app.post("/api/withdraw", async (req,res) => {
     }
 
     const user = userResult.rows[0];
+const pendingResult = await client.query(
+  `SELECT id FROM withdrawals
+   WHERE user_id = $1
+   AND status = 'pending'
+   LIMIT 1`,
+  [id]
+);
 
+if (pendingResult.rows.length > 0) {
+  await client.query("ROLLBACK");
+  return res.status(409).json({
+    error: "You already have a pending withdrawal."
+  });
+}
+    
     if (amount * 100 > user.balance) {
       await client.query("ROLLBACK");
       return res.status(400).json({
