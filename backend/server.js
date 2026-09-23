@@ -690,7 +690,9 @@ async function handleMasterMessage(message) {
       "🔐 CoinHammer Master Admin Bot\n\n" +
 "Welcome Admin!\n\n" +
 "Available command:\n" +
-"/stats - View bot statistics"
+"/stats - View bot statistics\n" +
+"/users - View users\n" +
+"/withdrawals - View pending withdrawals"
     );
     return;
   }
