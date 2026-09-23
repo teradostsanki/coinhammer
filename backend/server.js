@@ -730,6 +730,38 @@ async function handleMasterMessage(message) {
     }
     return;
   }
+  if (text === "/users") {
+  try {
+    const result = await pool.query(`
+      SELECT id, username, balance, tasks_completed
+      FROM users
+      ORDER BY id DESC
+      LIMIT 20
+    `);
+
+    if (!result.rows.length) {
+      await masterSend(chatId, "👥 No users found.");
+      return;
+    }
+
+    let msg = "👥 CoinHammer Users\n\n";
+
+    for (const u of result.rows) {
+      msg +=
+        `🆔 ${u.id}\n` +
+        `👤 ${u.username || "No username"}\n` +
+        `🪙 ${u.balance} coins\n` +
+        `✅ Tasks: ${u.tasks_completed}\n\n`;
+    }
+
+    await masterSend(chatId, msg);
+  } catch (error) {
+    console.error("MASTER BOT USERS ERROR:", error);
+    await masterSend(chatId, "❌ Failed to load users.");
+  }
+
+  return;
+  }
 if (text === "/withdrawals") {
   try {
     const result = await pool.query(`
