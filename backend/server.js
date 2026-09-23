@@ -755,7 +755,7 @@ tasks_completed, last_daily
         `👤 ${u.username || "No username"}\n` +
         `🪙 ${u.balance} coins\n` +
         `✅ Tasks: ${u.tasks_completed}\n` +
-`📅 Daily: ${u.last_daily || "Not claimed"}\n\n`;
+`📅 Daily: ${u.last_daily ? new Date(u.last_daily).toLocaleDateString("en-IN", {day:"2-digit", month:"short", year:"numeric"}) : "Not claimed"}\n\n`;
     }
 
     await masterSend(chatId, msg);
