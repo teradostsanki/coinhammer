@@ -588,6 +588,7 @@ app.post("/api/withdraw", async (req,res) => {
     : `🏦 Account: ${accountNumber}\n🏦 IFSC: ${ifsc}\n👤 Holder: ${accountHolderName}`}\n` +
   `⏳ Status: Pending`,
   {
+  reply_markup: {
   inline_keyboard: [
     [
       { text: "✅ Approve", callback_data: `approve_${withdrawal.rows[0].id}` },
