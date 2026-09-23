@@ -576,6 +576,7 @@ app.post("/api/withdraw", async (req,res) => {
     );
 
     await client.query("COMMIT");
+    
 
     res.json({
       ok: true,
@@ -828,7 +829,7 @@ if (text === "/withdrawals") {
               processed_at = CURRENT_TIMESTAMP
           WHERE id = $1
             AND status = 'pending'
-          RETURNING id, user_id, amount
+          RETURNING id, user_id, amount, method
         `, [withdrawalId]);
 
         if (!result.rows.length) {
@@ -856,7 +857,15 @@ if (text === "/withdrawals") {
           `👤 User: ${w.user_id}\n` +
           `💰 Amount: ₹${w.amount}`
         );
-
+        await masterSend(
+          "@CoinHammerPayments",
+          `🎉 Withdrawal Approved\n\n` +
+          `🆔 Withdrawal ID: ${w.id}\n` +
+          `👤 User: ${w.user_id}\n` +
+          `💰 Amount: ₹${w.amount}\n` +
+          `💳 Method: ${w.method || "Withdrawal"}\n` +
+          `✅ Status: Approved`
+        );
       } catch (error) {
         console.error("APPROVE WITHDRAWAL ERROR:", error);
         await masterSend(chatId, "❌ Failed to approve withdrawal.");
