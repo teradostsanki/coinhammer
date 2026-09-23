@@ -593,10 +593,11 @@ app.post("/api/withdraw", async (req,res) => {
     [
       { text: "✅ Approve", callback_data: `approve_${withdrawal.rows[0].id}` },
       { text: "❌ Reject", callback_data: `reject_${withdrawal.rows[0].id}` }
-    ]
+        ]
   ]
 }
-  );
+}
+);
 
     res.json({
       ok: true,
