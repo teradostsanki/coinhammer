@@ -596,6 +596,7 @@ app.post("/api/withdraw", async (req,res) => {
     ]
   ]
 }
+  );
 
     res.json({
       ok: true,
