@@ -533,7 +533,8 @@ app.post("/api/withdraw", async (req,res) => {
        FROM withdrawals
        WHERE user_id = $1
        AND (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
-      [id]
+`,
+[id]
     );
 
     if (countResult.rows[0].count >= 2) {
