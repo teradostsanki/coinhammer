@@ -547,6 +547,13 @@ input:focus-visible{
 <script>
 const tg=window.Telegram?.WebApp;
   function goHome(){
+  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
+    el.style.display="";
+  });
+
+  $("output").style.display="none";
+  $("output").classList.remove("show");
+
   window.scrollTo({top:0,behavior:"smooth"});
 }
 
