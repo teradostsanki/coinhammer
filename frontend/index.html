@@ -726,12 +726,47 @@ async function claimReferral(){
 
     $("activityList").innerHTML=items.slice(0,3).map(x=>`
       <div class="card" style="margin-top:10px;">
-        <div class="title">${x.description||x.type}</div>
-        <div class="muted">
-          ${x.amount>0?"+"+x.amount+" coins":""}
-          ${x.status? " • "+x.status:""}
+  <div class="title">${x.description||x.type}</div>
+
+  <div class="muted">
+    ${x.amount>0 ? "+"+x.amount+" coins":""}
+    ${x.status ? " • "+x.status:""}
+  </div>
+
+  ${
+    x.type === "withdrawal"
+      ? `
+        <div class="muted" style="margin-top:6px;font-size:12px;">
+          🕐 Requested:
+          ${x.withdrawal_requested_at
+            ? new Date(x.withdrawal_requested_at).toLocaleString("en-IN",{
+                day:"2-digit",
+                month:"short",
+                hour:"2-digit",
+                minute:"2-digit"
+              })
+            : "—"}
         </div>
-      </div>
+
+        ${
+          x.withdrawal_processed_at
+            ? `
+              <div class="muted" style="font-size:12px;">
+                ${x.status === "approved" ? "✅ Approved:" : "❌ Rejected:"}
+                ${new Date(x.withdrawal_processed_at).toLocaleString("en-IN",{
+                  day:"2-digit",
+                  month:"short",
+                  hour:"2-digit",
+                  minute:"2-digit"
+                })}
+              </div>
+            `
+            : ""
+        }
+      `
+      : ""
+  }
+</div>
     `).join("");
   }catch(e){
     $("activityList").textContent="Unable to load activity.";
