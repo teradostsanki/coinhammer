@@ -689,23 +689,19 @@ let walletPage=null;
 
 function goWithdraw(){
 
-  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
+  document.querySelectorAll("main > *").forEach(el=>{
     el.style.display="none";
+    el.hidden=true;
+    el.classList.remove("show");
   });
 
-  $("output").style.display="block";
-  $("output").classList.add("show");
-
-  if(!walletPage){
-    walletPage=$("wallet");
-  }
-
+  $("output").style.display="none";
+  $("output").classList.remove("show");
   $("output").innerHTML="";
-  $("output").appendChild(walletPage);
 
-  walletPage.style.display="block";
-  walletPage.hidden=false;
-  walletPage.classList.add("show");
+  $("wallet").hidden=false;
+  $("wallet").style.display="block";
+  $("wallet").classList.add("show");
 
   window.scrollTo({top:0,behavior:"smooth"});
 }
