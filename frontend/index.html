@@ -684,14 +684,18 @@ async function goReferrals(){
 function showWallet(){
   document.querySelectorAll("main > section, main > .grid").forEach(el=>{
     el.style.display="none";
+    el.classList.remove("show");
+    el.hidden=true;
   });
-$("activity").style.display="none";
-$("activity").classList.remove("show");
-  $("activity").hidden=true;
+
+  $("output").style.display="none";
+  $("output").classList.remove("show");
+
+  $("wallet").hidden=false;
   $("wallet").style.display="block";
   $("wallet").classList.add("show");
 
-  $("wallet").scrollIntoView({behavior:"smooth"});
+  window.scrollTo({top:0,behavior:"smooth"});
 }
 
 function showInvite(){
