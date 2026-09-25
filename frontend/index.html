@@ -688,26 +688,29 @@ async function goReferrals(){
 let walletPage=null;
 
 function goWithdraw(){
-  document.querySelectorAll("main > *").forEach(el=>{
-    if(el.id!=="output"){
+  const output=$("output");
+
+  document.querySelectorAll("main *").forEach(el=>{
+    if(!el.closest("#output")){
       el.style.setProperty("display","none","important");
-      el.classList.remove("show");
       el.hidden=true;
+      el.classList.remove("show");
     }
   });
 
-  $("output").style.display="block";
-  $("output").classList.add("show");
+  output.style.setProperty("display","block","important");
+  output.hidden=false;
+  output.classList.add("show");
 
   if(!walletPage){
     walletPage=$("wallet");
   }
 
-  $("output").innerHTML="";
-  $("output").appendChild(walletPage);
+  output.innerHTML="";
+  output.appendChild(walletPage);
 
   walletPage.hidden=false;
-  walletPage.style.display="block";
+  walletPage.style.setProperty("display","block","important");
   walletPage.classList.add("show");
 
   window.scrollTo({top:0,behavior:"smooth"});
