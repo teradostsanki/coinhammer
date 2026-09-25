@@ -690,7 +690,7 @@ let walletPage=null;
 function goWithdraw(){
   document.querySelectorAll("main > *").forEach(el=>{
     if(el.id!=="output"){
-      el.style.display="none";
+      el.style.setProperty("display","none","important");
       el.classList.remove("show");
       el.hidden=true;
     }
