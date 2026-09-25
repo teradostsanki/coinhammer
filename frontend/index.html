@@ -691,6 +691,7 @@ function goWithdraw(){
   document.querySelectorAll("main > *").forEach(el=>{
     if(el.id!=="output"){
       el.style.display="none";
+      el.classList.remove("show");
       el.hidden=true;
     }
   });
