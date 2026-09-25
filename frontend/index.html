@@ -561,7 +561,7 @@ const tg=window.Telegram?.WebApp;
   window.scrollTo({top:0,behavior:"smooth"});
 }
 
-function goTasks(){
+async function goTasks(){
   document.querySelectorAll("main > section, main > .grid").forEach(el=>{
     el.style.display="none";
   });
@@ -570,17 +570,46 @@ function goTasks(){
   $("output").classList.add("show");
 
   $("output").innerHTML=`
-    <h2>🎯 Tasks</h2>
-
-    <div class="card">
-      <b>Complete Tasks</b>
-      <div class="muted">Complete available tasks and earn coins.</div>
+    <h2>📋 Tasks</h2>
+    <div id="taskPageList">
+      Loading tasks...
     </div>
 
-    <button type="button" onclick="goHome()" style="margin-top:15px;">
+    <button type="button" onclick="goHome()"
+      style="margin-top:15px;">
       ← Back to Home
     </button>
   `;
+
+  try{
+    const r=await fetch(api+"/api/tasks");
+    const j=await r.json();
+
+    $("taskPageList").innerHTML=(j.tasks||[]).map(t=>`
+      <div class="card" style="
+        padding:12px;
+        margin-top:10px;
+        background:#1b2230;
+        border-radius:12px;">
+        
+        <b>${t.title}</b>
+
+        <div class="muted">
+          Reward: ${t.reward} COIN
+        </div>
+
+        <button
+          type="button"
+          onclick="completeTask('${t.id}')"
+          style="margin-top:10px;width:100%;">
+          ✅ Complete
+        </button>
+      </div>
+    `).join("");
+
+  }catch(e){
+    $("taskPageList").textContent="Unable to load tasks.";
+  }
 
   window.scrollTo({top:0,behavior:"smooth"});
 }
@@ -868,23 +897,7 @@ async function claimReferral(){
   $("earn").onclick=async()=>{$("earn").disabled=true;$("timer").textContent="Opening rewarded ad...";try{const result=await AdController.show();if(!result?.done){$("timer").textContent="Ad not completed — no reward";return}const j=await post("/api/earn",{id});balance=j.balance;render();$("timer").textContent="+100 coins"}catch(e){$("notice").textContent=e.message;setTimeout(()=>$("notice").textContent="",3000)}finally{$("earn").disabled=false}}
 $("daily").onclick=async()=>{$("output").classList.remove("show");$("output").style.display="none";try{const j=await post("/api/daily",{id});balance=j.balance;render();$("notice").textContent="+250 daily bonus";setTimeout(()=>$("notice").textContent="",3000)}catch(e){$("notice").textContent=e.message;setTimeout(()=>$("notice").textContent="",3000)}}
 $("invite").onclick=goReferrals;
-$("tasks").onclick=async()=>{
-  try{
-    const r=await fetch(api+"/api/tasks");
-    const j=await r.json();
-
-    $("output").style.display="block";
-    $("output").innerHTML="<h3>📋 Tasks</h3>"+j.tasks.map(t=>
-      `<div style="padding:12px;margin:8px 0;background:#1b2230;border-radius:12px">
-        <b>${t.title}</b>
-        <div class="muted">Reward: ${t.reward} COIN</div>
-        <button onclick="completeTask('${t.id}')">✅ Complete</button>
-      </div>`
-    ).join("");
-  }catch(e){
-    $("notice").textContent="Unable to load tasks";
-  }
-};
+$("tasks").onclick=goTasks;
 
 async function completeTask(taskId){
   try{
