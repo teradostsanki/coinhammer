@@ -701,6 +701,14 @@ function goWithdraw(){
   output.style.setProperty("display","block","important");
   output.hidden=false;
   output.classList.add("show");
+  output.style.setProperty("position","fixed","important");
+output.style.setProperty("top","0","important");
+output.style.setProperty("left","0","important");
+output.style.setProperty("right","0","important");
+output.style.setProperty("bottom","90px","important");
+output.style.setProperty("overflow-y","auto","important");
+output.style.setProperty("z-index","9999","important");
+output.style.setProperty("background","var(--bg)","important");
 
   if(!walletPage){
     walletPage=$("wallet");
