@@ -423,15 +423,19 @@ input:focus-visible{
 </section>
 <div class="grid">
 <button class="card" id="daily" onclick="document.getElementById('notice').textContent='Daily clicked';"><div class="icon">🎁</div><div class="title">Daily Bonus</div><div class="muted">Claim once per day</div></button>
-<button class="card" id="tasks"><div class="icon">🎯</div><div class="title">Tasks</div><div class="muted">Complete & earn</div></button>
-<button class="card" id="invite"><div class="icon">👥</div><div class="title">Invite Friends</div><div class="muted">Referral rewards</div></button>
+<button class="card" id="tasks">
+  <div class="icon">🎯</div>
+  <div class="title">Tasks</div>
+  <div class="muted">Complete & earn</div>
+</button>
+<button class="card" id="invite" ><div class="icon">👥</div><div class="title">Invite Friends</div><div class="muted">Referral rewards</div></button>
 <button class="card" id="leader">
   <div class="icon">🏆</div>
   <div class="title">Leaderboard</div>
   <div class="muted">Top earners</div>
 </button>
 
-<button class="card" id="withdraw">
+<button class="card" id="withdraw" onclick="showWallet()">
   <div class="icon">💰</div>
   <div class="title">Withdraw</div>
   <div class="muted">Cash out coins</div>
@@ -558,12 +562,52 @@ const tg=window.Telegram?.WebApp;
 }
 
 function goTasks(){
-  $("tasks").click();
+  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
+    el.style.display="none";
+  });
+
+  $("output").style.display="block";
+  $("output").classList.add("show");
+
+  $("output").innerHTML=`
+    <h2>🎯 Tasks</h2>
+
+    <div class="card">
+      <b>Complete Tasks</b>
+      <div class="muted">Complete available tasks and earn coins.</div>
+    </div>
+
+    <button type="button" onclick="goHome()" style="margin-top:15px;">
+      ← Back to Home
+    </button>
+  `;
+
   window.scrollTo({top:0,behavior:"smooth"});
 }
 
 function goReferrals(){
-  $("invite").click();
+  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
+    el.style.display="none";
+  });
+
+  $("output").style.display="block";
+  $("output").classList.add("show");
+
+  $("output").innerHTML=`
+    <h2>👥 Invite Friends</h2>
+
+    <div class="card">
+      <b>Invite Friends</b>
+      <div class="muted">
+        Share your referral link and earn rewards.
+      </div>
+    </div>
+
+    <button type="button" onclick="goHome()" style="margin-top:15px;">
+      ← Back to Home
+    </button>
+  `;
+
   window.scrollTo({top:0,behavior:"smooth"});
 }
 function showWallet(){
