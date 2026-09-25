@@ -859,6 +859,7 @@ $("upiOption").onclick=()=>{
 
     balance=j.balance;
     render();
+    await loadActivities();
 
     $("notice").textContent="✅ Withdrawal request submitted successfully";
 
