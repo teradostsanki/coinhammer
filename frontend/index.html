@@ -685,7 +685,8 @@ function showWallet(){
   document.querySelectorAll("main > section, main > .grid").forEach(el=>{
     el.style.display="none";
   });
-
+$("activity").style.display="none";
+$("activity").classList.remove("show");
   $("wallet").style.display="block";
   $("wallet").classList.add("show");
 
