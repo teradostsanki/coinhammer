@@ -201,13 +201,24 @@ app.get("/api/referral/:id", (req,res) => {
 app.get("/api/activities/:id", async (req,res) => {
   try {
     const result = await pool.query(
-      `SELECT type, amount, description, status, created_at
-       FROM activities
-       WHERE user_id = $1
-       ORDER BY created_at DESC
-       LIMIT 20`,
-      [String(req.params.id)]
-    );
+  `SELECT
+     a.type,
+     a.amount,
+     a.description,
+     a.status,
+     a.created_at,
+     w.created_at AS withdrawal_requested_at,
+     w.processed_at AS withdrawal_processed_at
+   FROM activities a
+   LEFT JOIN withdrawals w
+     ON w.user_id = a.user_id
+     AND a.type = 'withdrawal'
+     AND a.description LIKE 'Withdrawal ₹' || w.amount::text || '%'
+   WHERE a.user_id = $1
+   ORDER BY a.created_at DESC
+   LIMIT 20`,
+  [String(req.params.id)]
+);
 
     res.json(result.rows);
   } catch(e) {
