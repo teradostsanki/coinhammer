@@ -688,37 +688,23 @@ async function goReferrals(){
 let walletPage=null;
 
 function goWithdraw(){
-  const output=$("output");
 
-  document.querySelectorAll("main *").forEach(el=>{
-    if(!el.closest("#output")){
-      el.style.setProperty("display","none","important");
-      el.hidden=true;
-      el.classList.remove("show");
-    }
+  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
+    el.style.display="none";
   });
 
-  output.style.setProperty("display","block","important");
-  output.hidden=false;
-  output.classList.add("show");
-  output.style.setProperty("position","fixed","important");
-output.style.setProperty("top","0","important");
-output.style.setProperty("left","0","important");
-output.style.setProperty("right","0","important");
-output.style.setProperty("bottom","90px","important");
-output.style.setProperty("overflow-y","auto","important");
-output.style.setProperty("z-index","9999","important");
-output.style.setProperty("background","var(--bg)","important");
+  $("output").style.display="block";
+  $("output").classList.add("show");
 
   if(!walletPage){
     walletPage=$("wallet");
   }
 
-  output.innerHTML="";
-  output.appendChild(walletPage);
+  $("output").innerHTML="";
+  $("output").appendChild(walletPage);
 
+  walletPage.style.display="block";
   walletPage.hidden=false;
-  walletPage.style.setProperty("display","block","important");
   walletPage.classList.add("show");
 
   window.scrollTo({top:0,behavior:"smooth"});
