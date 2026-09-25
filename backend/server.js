@@ -586,7 +586,15 @@ app.post("/api/withdraw", async (req,res) => {
         amount
       ]
     );
-
+await client.query(`
+  INSERT INTO activities
+  (user_id, type, amount, description, status)
+  VALUES ($1, 'withdrawal', $2, $3, 'pending')
+`, [
+  id,
+  Math.round(amount * 100),
+  `Withdrawal ₹${amount.toFixed(2)} requested`
+]);
     await client.query("COMMIT");
   await masterSend(
   process.env.MASTER_ADMIN_ID,
@@ -874,12 +882,25 @@ if (text === "/withdrawals") {
         const w = result.rows[0];
 
         await pool.query(`
-          INSERT INTO activities (user_id, type, amount, description, status)
-          VALUES ($1, 'withdrawal', 0, $2, 'approved')
-        `, [
-          w.user_id,
-          `Withdrawal ₹${w.amount} approved`
-        ]);
+  UPDATE activities
+  SET amount = 0,
+      description = $1,
+      status = 'approved'
+  WHERE id = (
+    SELECT id
+    FROM activities
+    WHERE user_id = $2
+      AND type = 'withdrawal'
+      AND status = 'pending'
+      AND amount = $3
+    ORDER BY created_at DESC
+    LIMIT 1
+  )
+`, [
+  `Withdrawal ₹${w.amount} approved`,
+  w.user_id,
+  Math.round(Number(w.amount) * 100)
+]);
 
         await masterSend(
           chatId,
@@ -941,13 +962,24 @@ if (text === "/withdrawals") {
         `, [refundCoins, w.user_id]);
 
         await client.query(`
-          INSERT INTO activities (user_id, type, amount, description, status)
-          VALUES ($1, 'withdrawal', $2, $3, 'rejected')
-        `, [
-          w.user_id,
-          refundCoins,
-          `Withdrawal ₹${w.amount} rejected - coins refunded`
-        ]);
+  UPDATE activities
+  SET amount = $1,
+      description = $2,
+      status = 'rejected'
+  WHERE id = (
+    SELECT id
+    FROM activities
+    WHERE user_id = $3
+      AND type = 'withdrawal'
+      AND status = 'pending'
+    ORDER BY created_at DESC
+    LIMIT 1
+  )
+`, [
+  refundCoins,
+  `Withdrawal ₹${w.amount} rejected - coins refunded`,
+  w.user_id
+]);
 
         await client.query("COMMIT");
 
