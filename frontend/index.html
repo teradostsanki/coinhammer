@@ -435,7 +435,7 @@ input:focus-visible{
   <div class="muted">Top earners</div>
 </button>
 
-<button class="card" id="withdraw" onclick="showWallet()">
+<button class="card" id="withdraw" onclick="goWithdraw()">
   <div class="icon">💰</div>
   <div class="title">Withdraw</div>
   <div class="muted">Cash out coins</div>
@@ -551,12 +551,16 @@ input:focus-visible{
 <script>
 const tg=window.Telegram?.WebApp;
   function goHome(){
-  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
-    el.style.display="";
+  document.querySelectorAll("main > *").forEach(el=>{
+    if(el.id!=="output"){
+      el.hidden=false;
+      el.style.display="";
+    }
   });
 
   $("output").style.display="none";
   $("output").classList.remove("show");
+  $("output").innerHTML="";
 
   window.scrollTo({top:0,behavior:"smooth"});
 }
@@ -681,21 +685,35 @@ async function goReferrals(){
 
   window.scrollTo({top:0,behavior:"smooth"});
 }
-function showWallet(){
-  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
-    el.style.display="none";
-    el.classList.remove("show");
-    el.hidden=true;
+let walletPage=null;
+
+function goWithdraw(){
+  document.querySelectorAll("main > *").forEach(el=>{
+    if(el.id!=="output"){
+      el.style.display="none";
+      el.hidden=true;
+    }
   });
 
-  $("output").style.display="none";
-  $("output").classList.remove("show");
+  $("output").style.display="block";
+  $("output").classList.add("show");
 
-  $("wallet").hidden=false;
-  $("wallet").style.display="block";
-  $("wallet").classList.add("show");
+  if(!walletPage){
+    walletPage=$("wallet");
+  }
+
+  $("output").innerHTML="";
+  $("output").appendChild(walletPage);
+
+  walletPage.hidden=false;
+  walletPage.style.display="block";
+  walletPage.classList.add("show");
 
   window.scrollTo({top:0,behavior:"smooth"});
+}
+
+function showWallet(){
+  goWithdraw();
 }
 
 function showInvite(){
