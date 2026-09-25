@@ -585,7 +585,7 @@ function goTasks(){
   window.scrollTo({top:0,behavior:"smooth"});
 }
 
-function goReferrals(){
+async function goReferrals(){
   document.querySelectorAll("main > section, main > .grid").forEach(el=>{
     el.style.display="none";
   });
@@ -601,12 +601,54 @@ function goReferrals(){
       <div class="muted">
         Share your referral link and earn rewards.
       </div>
+
+      <div id="refLink"
+        style="margin-top:12px;
+        padding:12px;
+        border:1px solid var(--border);
+        border-radius:12px;
+        word-break:break-all;">
+        Loading referral link...
+      </div>
+
+      <button id="copyRef"
+        type="button"
+        style="margin-top:12px;width:100%;">
+        📋 Copy Referral Link
+      </button>
     </div>
 
-    <button type="button" onclick="goHome()" style="margin-top:15px;">
+    <button type="button" onclick="goHome()"
+      style="margin-top:15px;">
       ← Back to Home
     </button>
   `;
+
+  try{
+    const r=await fetch(
+      api+"/api/referral/"+encodeURIComponent(id)
+    );
+
+    const j=await r.json();
+
+    if(j.error){
+      throw new Error(j.error);
+    }
+
+    $("refLink").textContent=j.link||"Referral link unavailable";
+
+    $("copyRef").onclick=async()=>{
+      try{
+        await navigator.clipboard.writeText(j.link);
+        $("copyRef").textContent="✅ Copied!";
+      }catch(e){
+        $("notice").textContent=e.message;
+      }
+    };
+
+  }catch(e){
+    $("refLink").textContent="Unable to load referral link.";
+  }
 
   window.scrollTo({top:0,behavior:"smooth"});
 }
