@@ -825,7 +825,7 @@ async function claimReferral(){
   }
   $("earn").onclick=async()=>{$("earn").disabled=true;$("timer").textContent="Opening rewarded ad...";try{const result=await AdController.show();if(!result?.done){$("timer").textContent="Ad not completed — no reward";return}const j=await post("/api/earn",{id});balance=j.balance;render();$("timer").textContent="+100 coins"}catch(e){$("notice").textContent=e.message;setTimeout(()=>$("notice").textContent="",3000)}finally{$("earn").disabled=false}}
 $("daily").onclick=async()=>{$("output").classList.remove("show");$("output").style.display="none";try{const j=await post("/api/daily",{id});balance=j.balance;render();$("notice").textContent="+250 daily bonus";setTimeout(()=>$("notice").textContent="",3000)}catch(e){$("notice").textContent=e.message;setTimeout(()=>$("notice").textContent="",3000)}}
-$("invite").onclick=async()=>{try{const j=await (await fetch(api+"/api/referral/"+encodeURIComponent(id))).json();$("output").classList.add("show");$("output").innerHTML="<h3>👥 Your Referral Link</h3><div class='muted' id='refLink'>"+j.link+"</div><button id='copyRef' style='margin-top:12px;width:100%'>📋 Copy Referral Link</button>";$("copyRef").onclick=async()=>{await navigator.clipboard.writeText(j.link);$("copyRef").textContent="✅ Copied!"}}catch(e){$("notice").textContent=e.message}}
+$("invite").onclick=goReferrals;
 $("tasks").onclick=async()=>{
   try{
     const r=await fetch(api+"/api/tasks");
