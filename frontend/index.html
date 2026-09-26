@@ -963,7 +963,7 @@ const name=tgUser?.username||tgUser?.first_name||"DemoUser";
   const startParam=tg?.initDataUnsafe?.start_param||"";
 const $=x=>document.getElementById(x);
 let balance=0,dailyEarnCount=0,dailyEarnDate="";
-async function load(){try{const r=await fetch(api+"/api/user/"+encodeURIComponent(id));const u=await r.json();balance=u.balance;dailyEarnCount=u.daily_earn_count||0;dailyEarnDate=u.daily_earn_date||"";render()}catch(e){balance=1250;render();$("notice").textContent="Demo mode — connect the backend for real data."}}
+async function load(){try{const r=await fetch(api+"/api/user/"+encodeURIComponent(id)+"?username="+encodeURIComponent(name));const u=await r.json();balance=u.balance;dailyEarnCount=u.daily_earn_count||0;dailyEarnDate=u.daily_earn_date||"";render()}catch(e){balance=1250;render();$("notice").textContent="Demo mode — connect the backend for real data."}}
 function render(){$("balance").textContent=balance.toLocaleString("en-IN");;$("rupees").textContent="₹"+(balance/100).toFixed(2);$("todayEarn").textContent=(dailyEarnCount*100).toLocaleString("en-IN");$("adProgress").textContent=dailyEarnCount+"/5"}
 async function post(path,body){const r=await fetch(api+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw new Error(j.error||"Request failed");return j}
 async function claimReferral(){
