@@ -685,23 +685,151 @@ async function goReferrals(){
 
   window.scrollTo({top:0,behavior:"smooth"});
 }
-let walletPage=null;
 
 function goWithdraw(){
-
-  document.querySelectorAll("main > *").forEach(el=>{
-    el.hidden=true;
-    el.style.setProperty("display","none","important");
-    el.classList.remove("show");
+  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
+    el.style.display="none";
   });
 
-  $("wallet").hidden=false;
-  $("wallet").style.setProperty("display","block","important");
-  $("wallet").classList.add("show");
+  $("output").style.display="block";
+  $("output").classList.add("show");
+
+  $("output").innerHTML=`
+    <h2>💰 Withdraw</h2>
+
+    <div class="muted">
+      Minimum withdrawal ₹10 • Maximum 2 withdrawals per day
+    </div>
+
+    <div class="withdraw-options">
+      <button class="card" id="pageBankOption" type="button">
+        <div class="icon">🏦</div>
+        <div class="title">Bank Account</div>
+        <div class="muted">Withdraw to your bank account</div>
+      </button>
+
+      <button class="card" id="pageUpiOption" type="button">
+        <div class="icon">📱</div>
+        <div class="title">UPI</div>
+        <div class="muted">Withdraw using UPI</div>
+      </button>
+    </div>
+
+    <div class="card" id="pageBankForm" style="display:none;">
+      <h3>🏦 Bank Account</h3>
+      <input id="pageBankName" type="text" placeholder="Account Holder Name">
+      <input id="pageBankAccount" type="text" placeholder="Account Number">
+      <input id="pageBankIfsc" type="text" placeholder="IFSC Code">
+      <input id="pageBankAmount" type="number" min="10" placeholder="Withdrawal Amount ₹">
+      <button id="pageBankWithdraw" type="button">
+        🏦 Submit Withdrawal Request
+      </button>
+    </div>
+
+    <div class="card" id="pageUpiForm" style="display:none;">
+      <h3>📱 UPI Withdrawal</h3>
+      <input id="pageUpiId" type="text" placeholder="UPI ID (example@upi)">
+      <input id="pageUpiAmount" type="number" min="10" placeholder="Withdrawal Amount ₹">
+      <button id="pageUpiWithdraw" type="button">
+        📱 Submit Withdrawal Request
+      </button>
+    </div>
+
+    <div class="muted" style="margin-top:12px;">
+      ⏳ Withdrawal requests are sent for admin approval.
+    </div>
+
+    <button type="button" onclick="goMine()" style="margin-top:15px;">
+      ← Back to Mine
+    </button>
+  `;
+
+  $("pageBankOption").onclick=()=>{
+    $("pageBankForm").style.display="block";
+    $("pageUpiForm").style.display="none";
+  };
+
+  $("pageUpiOption").onclick=()=>{
+    $("pageUpiForm").style.display="block";
+    $("pageBankForm").style.display="none";
+  };
+
+  $("pageBankWithdraw").onclick=()=>{
+    const name=$("pageBankName").value.trim();
+    const account=$("pageBankAccount").value.trim();
+    const ifsc=$("pageBankIfsc").value.trim();
+    const amount=Number($("pageBankAmount").value);
+
+    if(!name||!account||!ifsc||amount<10){
+      $("notice").textContent="❌ Please fill all bank details and minimum ₹10";
+      return;
+    }
+
+    submitWithdrawalPage("bank",{
+      accountHolderName:name,
+      accountNumber:account,
+      ifsc:ifsc,
+      amount
+    });
+  };
+
+  $("pageUpiWithdraw").onclick=()=>{
+    const upiId=$("pageUpiId").value.trim();
+    const amount=Number($("pageUpiAmount").value);
+
+    if(!upiId||amount<10){
+      $("notice").textContent="❌ Please enter UPI ID and minimum ₹10";
+      return;
+    }
+
+    submitWithdrawalPage("upi",{
+      upiId,
+      amount
+    });
+  };
 
   window.scrollTo({top:0,behavior:"smooth"});
 }
+async function submitWithdrawalPage(method,data){
+  try{
+    const body={
+      id,
+      method,
+      amount:data.amount
+    };
 
+    if(method==="bank"){
+      body.accountHolderName=data.accountHolderName;
+      body.accountNumber=data.accountNumber;
+      body.ifsc=data.ifsc;
+    }
+
+    if(method==="upi"){
+      body.upiId=data.upiId;
+    }
+
+    const j=await post("/api/withdraw",body);
+
+    balance=j.balance;
+    render();
+    await loadActivities();
+
+    $("notice").textContent="✅ Withdrawal request submitted successfully";
+
+    if(method==="bank"){
+      $("pageBankAmount").value="";
+    }else{
+      $("pageUpiAmount").value="";
+    }
+
+    setTimeout(()=>$("notice").textContent="",3000);
+
+  }catch(e){
+    $("notice").textContent="❌ "+e.message;
+    setTimeout(()=>$("notice").textContent="",3000);
+  }
+}
+  
 function showWallet(){
   goWithdraw();
 }
