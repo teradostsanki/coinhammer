@@ -818,6 +818,24 @@ tasks_completed, last_daily
 
   return;
   }
+  if (text === "/deletedemo") {
+  try {
+    await pool.query("DELETE FROM activities WHERE user_id = 'demo-user'");
+    await pool.query("DELETE FROM user_tasks WHERE user_id = 'demo-user'");
+    await pool.query(
+      "DELETE FROM referrals WHERE referrer_id = 'demo-user' OR referred_id = 'demo-user'"
+    );
+    await pool.query("DELETE FROM withdrawals WHERE user_id = 'demo-user'");
+    await pool.query("DELETE FROM users WHERE id = 'demo-user'");
+
+    await masterSend(chatId, "✅ Demo user deleted successfully.");
+  } catch (error) {
+    console.error("DELETE DEMO USER ERROR:", error);
+    await masterSend(chatId, "❌ Failed to delete demo user.");
+  }
+
+  return;
+  }
 if (text === "/withdrawals") {
   try {
     const result = await pool.query(`
