@@ -94,7 +94,19 @@ app.get("/health", (req,res) => {
   res.send("OK");
 });
 app.get("/api/user/:id", async (req,res) => {
-  const u = await getUser(String(req.params.id));
+  const id = String(req.params.id);
+  const username = String(req.query.username || "TelegramUser");
+
+  const u = await getUser(id, username);
+
+  if (username && username !== "TelegramUser" && u.username !== username) {
+    const updated = await pool.query(
+      "UPDATE users SET username = $1 WHERE id = $2 RETURNING *",
+      [username, id]
+    );
+    return res.json(updated.rows[0]);
+  }
+
   res.json(u);
 });
 
