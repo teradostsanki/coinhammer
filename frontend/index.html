@@ -1128,7 +1128,54 @@ $("upiOption").onclick=()=>{
 
 $("bankWithdraw").onclick=()=>submitWithdrawal("bank");
 $("upiWithdraw").onclick=()=>submitWithdrawal("upi");
-$("leader").onclick=async()=>{try{const list=await (await fetch(api+"/api/leaderboard")).json();$("output").classList.add("show");$("output").innerHTML="<h3>🏆 Leaderboard</h3>"+list.map((u,i)=>"<div>"+(i+1)+". "+(u.username||"User")+" — "+u.balance.toLocaleString()+"</div>").join("")}catch(e){$("notice").textContent=e.message}}
+async function goLeaderboard(){
+  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
+    el.style.display="none";
+  });
+
+  $("output").style.display="block";
+  $("output").classList.add("show");
+
+  $("output").innerHTML=`
+    <h2>🏆 Leaderboard</h2>
+    <div id="leaderboardList">Loading leaderboard...</div>
+
+    <button type="button" onclick="goHome()" style="margin-top:15px;">
+      ← Back to Home
+    </button>
+  `;
+
+  try{
+    const r=await fetch(api+"/api/leaderboard");
+    const list=await r.json();
+
+    if(!r.ok || !Array.isArray(list)){
+      throw new Error(list.error || "Unable to load leaderboard");
+    }
+
+    $("leaderboardList").innerHTML=list.map((u,i)=>`
+      <div style="
+        padding:12px;
+        margin:8px 0;
+        border-radius:12px;
+        background:rgba(255,255,255,.06);
+      ">
+        <b>${i+1}. ${u.username || "User"}</b>
+        <span style="float:right;">
+          🪙 ${Number(u.balance || 0).toLocaleString()}
+        </span>
+      </div>
+    `).join("");
+
+  }catch(e){
+    $("leaderboardList").textContent="Unable to load leaderboard.";
+    console.error("Leaderboard error:",e);
+  }
+
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+$("leader").onclick=goLeaderboard;
 load();
   loadActivities();
   let historyItems = [];
