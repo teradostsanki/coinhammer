@@ -690,17 +690,13 @@ let walletPage=null;
 function goWithdraw(){
 
   document.querySelectorAll("main > *").forEach(el=>{
-    el.style.display="none";
     el.hidden=true;
+    el.style.setProperty("display","none","important");
     el.classList.remove("show");
   });
 
-  $("output").style.display="none";
-  $("output").classList.remove("show");
-  $("output").innerHTML="";
-
   $("wallet").hidden=false;
-  $("wallet").style.display="block";
+  $("wallet").style.setProperty("display","block","important");
   $("wallet").classList.add("show");
 
   window.scrollTo({top:0,behavior:"smooth"});
