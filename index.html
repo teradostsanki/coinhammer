@@ -1,0 +1,1276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CoinHammer</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://sad.adsgram.ai/js/sad.min.js"></script>
+<style>
+:root{
+  --bg:#070a0f;
+  --bg2:#0d131c;
+  --card:#101722;
+  --card2:#141d29;
+  --border:#243142;
+  --text:#f7f9fc;
+  --muted:#8e9aaa;
+  --gold:#f5c451;
+  --gold2:#ffe08a;
+  --green:#38d98a;
+  --red:#ff5f67;
+  --blue:#4da3ff;
+}
+
+*{
+  box-sizing:border-box;
+  -webkit-tap-highlight-color:transparent;
+}
+
+html{
+  scroll-behavior:smooth;
+}
+
+body{
+  margin:0;
+  min-height:100vh;
+  background:
+    radial-gradient(circle at 50% -10%,#182536 0,#0b1018 38%,#070a0f 75%);
+  color:var(--text);
+  font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+
+main{
+  width:100%;
+  max-width:620px;
+  margin:auto;
+  padding:16px 14px 42px;
+}
+
+/* HERO */
+
+.hero{
+  position:relative;
+  overflow:hidden;
+  padding:24px 20px 20px;
+  border:1px solid var(--border);
+  border-radius:28px;
+  background:
+    radial-gradient(circle at 100% 0,rgba(245,196,81,.16),transparent 32%),
+    linear-gradient(145deg,#121d2a,#0b1119);
+  box-shadow:0 18px 50px rgba(0,0,0,.38);
+}
+
+.hero:after{
+  content:"";
+  position:absolute;
+  width:170px;
+  height:170px;
+  right:-70px;
+  top:-80px;
+  border-radius:50%;
+  background:rgba(245,196,81,.08);
+  pointer-events:none;
+}
+
+.brand{
+  position:relative;
+  z-index:1;
+  color:var(--gold);
+  font-size:17px;
+  font-weight:900;
+  letter-spacing:4px;
+}
+
+.balance{
+  position:relative;
+  z-index:1;
+  margin-top:22px;
+  font-size:52px;
+  line-height:1;
+  font-weight:900;
+  letter-spacing:-2px;
+}
+
+.muted{
+  color:var(--muted);
+  font-size:13px;
+}
+
+.hero>.muted{
+  margin-top:8px;
+  font-size:14px;
+  letter-spacing:1px;
+}
+
+/* EARN BUTTON */
+
+button{
+  font:inherit;
+  cursor:pointer;
+  color:var(--text);
+}
+
+.earn{
+  position:relative;
+  z-index:1;
+  width:100%;
+  margin-top:25px;
+  min-height:58px;
+  border:0;
+  border-radius:17px;
+  background:linear-gradient(135deg,var(--gold2),var(--gold));
+  color:#16120a;
+  font-size:17px;
+  font-weight:900;
+  box-shadow:0 10px 28px rgba(245,196,81,.18);
+  transition:.18s ease;
+}
+
+.earn:active{
+  transform:scale(.98);
+}
+
+.earn:disabled{
+  opacity:.55;
+}
+
+#timer{
+  position:relative;
+  z-index:1;
+  min-height:20px;
+  margin-top:10px;
+}
+
+/* QUICK CARDS */
+
+.grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  margin-top:14px;
+}
+
+.card{
+  position:relative;
+  overflow:hidden;
+  width:100%;
+  min-height:116px;
+  padding:18px;
+  border:1px solid var(--border);
+  border-radius:21px;
+  background:
+    linear-gradient(145deg,rgba(20,29,41,.98),rgba(13,19,28,.98));
+  color:var(--text);
+  text-align:left;
+  box-shadow:0 10px 28px rgba(0,0,0,.18);
+  transition:.18s ease;
+}
+
+.card:before{
+  content:"";
+  position:absolute;
+  width:90px;
+  height:90px;
+  right:-45px;
+  bottom:-45px;
+  border-radius:50%;
+  background:rgba(77,163,255,.035);
+}
+
+.card:active{
+  transform:scale(.97);
+  border-color:rgba(245,196,81,.45);
+}
+
+.icon{
+  position:relative;
+  z-index:1;
+  font-size:27px;
+}
+
+.title{
+  position:relative;
+  z-index:1;
+  margin-top:10px;
+  font-size:16px;
+  font-weight:800;
+}
+
+.card>.muted{
+  position:relative;
+  z-index:1;
+  margin-top:4px;
+  line-height:1.35;
+}
+
+/* PANELS */
+
+.panel{
+  display:none;
+  margin-top:14px;
+  padding:18px;
+  border:1px solid var(--border);
+  border-radius:22px;
+  background:linear-gradient(145deg,#111a25,#0d141e);
+  box-shadow:0 14px 35px rgba(0,0,0,.25);
+}
+
+.panel.show{
+  display:block;
+}
+
+.panel h3{
+  margin:0 0 14px;
+  font-size:19px;
+}
+
+input{
+  width:100%;
+  margin:7px 0;
+  padding:14px 15px;
+  border:1px solid var(--border);
+  border-radius:13px;
+  outline:none;
+  background:#0a1018;
+  color:var(--text);
+  font-size:14px;
+}
+
+input::placeholder{
+  color:#697687;
+}
+
+input:focus{
+  border-color:rgba(245,196,81,.65);
+  box-shadow:0 0 0 3px rgba(245,196,81,.08);
+}
+
+.panel button:not(.card){
+  width:100%;
+  margin-top:9px;
+  min-height:48px;
+  border:0;
+  border-radius:14px;
+  background:var(--gold);
+  color:#151109;
+  font-weight:850;
+}
+
+/* WITHDRAW */
+
+.withdraw-options{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  margin-top:16px;
+}
+
+.withdraw-options .card{
+  min-height:125px;
+}
+
+.withdraw-options .icon{
+  font-size:25px;
+}
+
+/* OUTPUT / ACTIVITY */
+
+#output{
+  margin-top:14px;
+}
+
+.notice{
+  min-height:22px;
+  margin:13px 0;
+  color:var(--muted);
+  text-align:center;
+  font-size:13px;
+}
+
+/* SMALL SCREEN */
+
+@media(max-width:390px){
+  main{
+    padding:12px 10px 35px;
+  }
+
+  .hero{
+    padding:21px 17px 18px;
+    border-radius:24px;
+  }
+
+  .balance{
+    font-size:45px;
+  }
+
+  .brand{
+    font-size:15px;
+    letter-spacing:3px;
+  }
+
+  .card{
+    padding:15px;
+    min-height:110px;
+  }
+
+  .title{
+    font-size:15px;
+  }
+}
+
+/* FOCUS */
+
+button:focus-visible,
+input:focus-visible{
+  outline:2px solid rgba(245,196,81,.6);
+  outline-offset:2px;
+}
+.mini-stats{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:8px;
+  margin:14px 0 18px;
+}
+
+.stat{
+  background:rgba(255,255,255,.035);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:10px 7px;
+  text-align:center;
+}
+
+.stat-value{
+  font-size:15px;
+  font-weight:800;
+  color:var(--gold2);
+}
+
+.stat-label{
+  margin-top:4px;
+  font-size:9px;
+  letter-spacing:1px;
+  color:var(--muted);
+  font-weight:700;
+}  
+  .bottom-nav{
+  position:fixed;
+  left:12px;
+  right:12px;
+  bottom:12px;
+  z-index:9999;
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:6px;
+  padding:8px;
+  background:rgba(15,23,42,.96);
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:22px;
+  box-shadow:0 12px 35px rgba(0,0,0,.45);
+  backdrop-filter:blur(14px);
+}
+
+.bottom-nav button{
+  border:0;
+  background:transparent;
+  color:#94a3b8;
+  border-radius:16px;
+  padding:9px 4px;
+  cursor:pointer;
+  font-weight:700;
+}
+
+.bottom-nav button:hover{
+  background:rgba(255,255,255,.08);
+  color:#fff;
+}
+
+.bottom-nav span{
+  display:block;
+  font-size:22px;
+  line-height:24px;
+}
+
+.bottom-nav small{
+  display:block;
+  margin-top:3px;
+  font-size:11px;
+}
+</style>
+</head>
+<body><main>
+<section class="hero">
+<div class="brand">◆ COINHAMMER</div>
+<div class="balance" id="balance">0</div>
+<div class="muted">COINS</div>
+ <div class="mini-stats">
+  <div class="stat">
+    <div class="stat-value" id="rupees">₹0</div>
+    <div class="stat-label">VALUE</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" id="todayEarn">0</div>
+    <div class="stat-label">TODAY</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" id="adProgress">0/5</div>
+    <div class="stat-label">ADS</div>
+  </div>
+</div> 
+<button class="earn" id="earn">🚀 START EARNING</button>
+<div class="muted" id="timer">Ready</div>
+</section>
+<div class="grid">
+<button class="card" id="daily" onclick="document.getElementById('notice').textContent='Daily clicked';"><div class="icon">🎁</div><div class="title">Daily Bonus</div><div class="muted">Claim once per day</div></button>
+<button class="card" id="tasks">
+  <div class="icon">🎯</div>
+  <div class="title">Tasks</div>
+  <div class="muted">Complete & earn</div>
+</button>
+<button class="card" id="invite" ><div class="icon">👥</div><div class="title">Invite Friends</div><div class="muted">Referral rewards</div></button>
+<button class="card" id="leader">
+  <div class="icon">🏆</div>
+  <div class="title">Leaderboard</div>
+  <div class="muted">Top earners</div>
+</button>
+
+<button class="card" id="withdraw" onclick="goWithdraw()">
+  <div class="icon">💰</div>
+  <div class="title">Withdraw</div>
+  <div class="muted">Cash out coins</div>
+</button></div>
+<section class="panel" id="wallet">
+  <h3>💰 Withdraw</h3>
+<button type="button" onclick="goMine()" style="margin-bottom:15px;">
+  ← Back to Mine
+</button>
+  
+  <div class="muted">
+    Minimum withdrawal ₹10 • Maximum 2 withdrawals per day
+  </div>
+
+  <div class="withdraw-options">
+
+    <button class="card" id="bankOption" type="button">
+      <div class="icon">🏦</div>
+      <div class="title">Bank Account</div>
+      <div class="muted">Withdraw to your bank account</div>
+    </button>
+
+    <button class="card" id="upiOption" type="button">
+      <div class="icon">📱</div>
+      <div class="title">UPI</div>
+      <div class="muted">Withdraw using UPI</div>
+    </button>
+
+  </div>
+
+  <div class="card" id="bankForm" style="display:none;">
+    <h3>🏦 Bank Account</h3>
+
+    <input id="bankName" type="text" placeholder="Account Holder Name">
+    <input id="bankAccount" type="text" placeholder="Account Number">
+    <input id="bankIfsc" type="text" placeholder="IFSC Code">
+    <input id="bankAmount" type="number" min="10" placeholder="Withdrawal Amount ₹">
+
+    <button id="bankWithdraw" type="button">
+      🏦 Submit Withdrawal Request
+    </button>
+  </div>
+
+  <div class="card" id="upiForm" style="display:none;">
+    <h3>📱 UPI Withdrawal</h3>
+
+    <input id="upiId" type="text" placeholder="UPI ID (example@upi)">
+    <input id="upiAmount" type="number" min="10" placeholder="Withdrawal Amount ₹">
+
+    <button id="upiWithdraw" type="button">
+      📱 Submit Withdrawal Request
+    </button>
+  </div>
+
+  <div class="muted">
+    ⏳ Withdrawal requests are sent for admin approval.
+  </div>
+</section>
+  <section class="panel show" id="activity">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+    <h3 style="margin:0;">📋 Recent Activity</h3>
+
+    <button
+      onclick="showHistory()"
+      style="padding:8px 14px;border-radius:20px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font-weight:700;">
+      See all
+    </button>
+  </div>
+
+  <div id="activityList" class="muted" style="margin-top:14px;">
+    Loading activity...
+  </div>
+</section>
+
+<section class="panel" id="history">
+  <h3>📜 History</h3>
+
+  <div style="display:flex;gap:8px;overflow-x:auto;margin:12px 0;">
+    <button onclick="filterHistory('all')">All</button>
+    <button onclick="filterHistory('earning')">Earnings</button>
+    <button onclick="filterHistory('task')">Tasks</button>
+    <button onclick="filterHistory('withdrawal')">Withdrawals</button>
+  </div>
+
+  <div id="historyList" class="muted">
+    Loading history...
+  </div>
+</section>
+<section class="panel" id="output"></section>
+<div class="notice" id="notice" aria-live="polite"></div>
+</main>
+  <nav class="bottom-nav">
+  <button onclick="goHome()">
+    <span>⌂</span>
+    <small>Home</small>
+  </button>
+
+  <button onclick="goTasks()">
+    <span>✓</span>
+    <small>Tasks</small>
+  </button>
+
+  <button onclick="goReferrals()">
+    <span>👥</span>
+    <small>Referrals</small>
+  </button>
+
+  <button onclick="goMine()">
+    <span>⚙</span>
+    <small>Mine</small>
+  </button>
+  </nav>
+<script>
+const tg=window.Telegram?.WebApp;
+  function goHome(){
+  document.querySelectorAll("main > *").forEach(el=>{
+    if(el.id!=="output"){
+      el.hidden=false;
+      el.style.display="";
+    }
+  });
+
+  $("output").style.display="none";
+  $("output").classList.remove("show");
+  $("output").innerHTML="";
+
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+async function goTasks(){
+  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
+    el.style.display="none";
+  });
+
+  $("output").style.display="block";
+  $("output").classList.add("show");
+
+  $("output").innerHTML=`
+    <h2>📋 Tasks</h2>
+    <div id="taskPageList">
+      Loading tasks...
+    </div>
+
+    <button type="button" onclick="goHome()"
+      style="margin-top:15px;">
+      ← Back to Home
+    </button>
+  `;
+
+  try{
+    const r=await fetch(api+"/api/tasks");
+    const j=await r.json();
+
+    $("taskPageList").innerHTML=(j.tasks||[]).map(t=>`
+      <div class="card" style="
+        padding:12px;
+        margin-top:10px;
+        background:#1b2230;
+        border-radius:12px;">
+        
+        <b>${t.title}</b>
+
+        <div class="muted">
+          Reward: ${t.reward} COIN
+        </div>
+
+        <button
+          type="button"
+          onclick="completeTask('${t.id}')"
+          style="margin-top:10px;width:100%;">
+          ✅ Complete
+        </button>
+      </div>
+    `).join("");
+
+  }catch(e){
+    $("taskPageList").textContent="Unable to load tasks.";
+  }
+
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+async function goReferrals(){
+  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
+    el.style.display="none";
+  });
+
+  $("output").style.display="block";
+  $("output").classList.add("show");
+
+  $("output").innerHTML=`
+    <h2>👥 Invite Friends</h2>
+
+    <div class="card">
+      <b>Invite Friends</b>
+      <div class="muted">
+        Share your referral link and earn rewards.
+      </div>
+
+      <div id="refLink"
+        style="margin-top:12px;
+        padding:12px;
+        border:1px solid var(--border);
+        border-radius:12px;
+        word-break:break-all;">
+        Loading referral link...
+      </div>
+
+      <button id="copyRef"
+        type="button"
+        style="margin-top:12px;width:100%;">
+        📋 Copy Referral Link
+      </button>
+    </div>
+
+    <button type="button" onclick="goHome()"
+      style="margin-top:15px;">
+      ← Back to Home
+    </button>
+  `;
+
+  try{
+    const r=await fetch(
+      api+"/api/referral/"+encodeURIComponent(id)
+    );
+
+    const j=await r.json();
+
+    if(j.error){
+      throw new Error(j.error);
+    }
+
+    $("refLink").textContent=j.link||"Referral link unavailable";
+
+    $("copyRef").onclick=async()=>{
+      try{
+        await navigator.clipboard.writeText(j.link);
+        $("copyRef").textContent="✅ Copied!";
+      }catch(e){
+        $("notice").textContent=e.message;
+      }
+    };
+
+  }catch(e){
+    $("refLink").textContent="Unable to load referral link.";
+  }
+
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+function goWithdraw(){
+  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
+    el.style.display="none";
+  });
+
+  $("output").style.display="block";
+  $("output").classList.add("show");
+
+  $("output").innerHTML=`
+    <h2>💰 Withdraw</h2>
+
+    <div class="muted">
+      Minimum withdrawal ₹10 • Maximum 2 withdrawals per day
+    </div>
+
+    <div class="withdraw-options">
+      <button class="card" id="pageBankOption" type="button">
+        <div class="icon">🏦</div>
+        <div class="title">Bank Account</div>
+        <div class="muted">Withdraw to your bank account</div>
+      </button>
+
+      <button class="card" id="pageUpiOption" type="button">
+        <div class="icon">📱</div>
+        <div class="title">UPI</div>
+        <div class="muted">Withdraw using UPI</div>
+      </button>
+    </div>
+
+    <div class="card" id="pageBankForm" style="display:none;">
+      <h3>🏦 Bank Account</h3>
+      <input id="pageBankName" type="text" placeholder="Account Holder Name">
+      <input id="pageBankAccount" type="text" placeholder="Account Number">
+      <input id="pageBankIfsc" type="text" placeholder="IFSC Code">
+      <input id="pageBankAmount" type="number" min="10" placeholder="Withdrawal Amount ₹">
+      <button id="pageBankWithdraw" type="button">
+        🏦 Submit Withdrawal Request
+      </button>
+    </div>
+
+    <div class="card" id="pageUpiForm" style="display:none;">
+      <h3>📱 UPI Withdrawal</h3>
+      <input id="pageUpiId" type="text" placeholder="UPI ID (example@upi)">
+      <input id="pageUpiAmount" type="number" min="10" placeholder="Withdrawal Amount ₹">
+      <button id="pageUpiWithdraw" type="button">
+        📱 Submit Withdrawal Request
+      </button>
+    </div>
+
+    <div class="muted" style="margin-top:12px;">
+      ⏳ Withdrawal requests are sent for admin approval.
+    </div>
+
+    <button type="button" onclick="goMine()" style="margin-top:15px;">
+      ← Back to Mine
+    </button>
+  `;
+
+  $("pageBankOption").onclick=()=>{
+    $("pageBankForm").style.display="block";
+    $("pageUpiForm").style.display="none";
+  };
+
+  $("pageUpiOption").onclick=()=>{
+    $("pageUpiForm").style.display="block";
+    $("pageBankForm").style.display="none";
+  };
+
+  $("pageBankWithdraw").onclick=()=>{
+    const name=$("pageBankName").value.trim();
+    const account=$("pageBankAccount").value.trim();
+    const ifsc=$("pageBankIfsc").value.trim();
+    const amount=Number($("pageBankAmount").value);
+
+    if(!name||!account||!ifsc||amount<10){
+      $("notice").textContent="❌ Please fill all bank details and minimum ₹10";
+      return;
+    }
+
+    submitWithdrawalPage("bank",{
+      accountHolderName:name,
+      accountNumber:account,
+      ifsc:ifsc,
+      amount
+    });
+  };
+
+  $("pageUpiWithdraw").onclick=()=>{
+    const upiId=$("pageUpiId").value.trim();
+    const amount=Number($("pageUpiAmount").value);
+
+    if(!upiId||amount<10){
+      $("notice").textContent="❌ Please enter UPI ID and minimum ₹10";
+      return;
+    }
+
+    submitWithdrawalPage("upi",{
+      upiId,
+      amount
+    });
+  };
+
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+async function submitWithdrawalPage(method,data){
+  try{
+    const body={
+      id,
+      method,
+      amount:data.amount
+    };
+
+    if(method==="bank"){
+      body.accountHolderName=data.accountHolderName;
+      body.accountNumber=data.accountNumber;
+      body.ifsc=data.ifsc;
+    }
+
+    if(method==="upi"){
+      body.upiId=data.upiId;
+    }
+
+    const j=await post("/api/withdraw",body);
+
+    balance=j.balance;
+    render();
+    await loadActivities();
+
+    $("notice").textContent="✅ Withdrawal request submitted successfully";
+
+    if(method==="bank"){
+      $("pageBankAmount").value="";
+    }else{
+      $("pageUpiAmount").value="";
+    }
+
+    setTimeout(()=>$("notice").textContent="",3000);
+
+  }catch(e){
+    $("notice").textContent="❌ "+e.message;
+    setTimeout(()=>$("notice").textContent="",3000);
+  }
+}
+  
+function showWallet(){
+  goWithdraw();
+}
+
+function showInvite(){
+  $("invite").click();
+}
+  function showNotifications(){
+  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
+    el.style.display="none";
+  });
+
+  $("output").style.display="block";
+  $("output").classList.add("show");
+
+  $("output").innerHTML=`
+    <h2>🔔 Notifications</h2>
+
+    <div class="card">
+      <b>No new notifications</b>
+      <div class="muted">You're all caught up.</div>
+    </div>
+  `;
+  }
+  function showHelp(){
+    
+  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
+    el.style.display="none";
+  });
+
+  $("output").style.display="block";
+  $("output").classList.add("show");
+
+  $("output").innerHTML=`
+    <h2>❓ Help & Support</h2>
+
+    <div class="card">
+      <b>Need help?</b>
+      <div class="muted">For CoinHammer support, please contact the admin.</div>
+    </div>
+
+    <div class="card">
+      <b>Common Issues</b>
+      <div class="muted">
+        If a task or withdrawal is not working, please try again later.
+      </div>
+    </div>
+  `;
+  }
+function showAbout(){
+  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
+    el.style.display="none";
+  });
+
+  $("output").style.display="block";
+  $("output").classList.add("show");
+
+  $("output").innerHTML=`
+    <h2>ℹ️ About CoinHammer</h2>
+
+    <div class="card">
+      <b>CoinHammer</b>
+      <div class="muted">Earn coins by completing tasks, daily bonuses and other activities.</div>
+    </div>
+
+    <div class="card">
+      <b>Version</b>
+      <div class="muted">CoinHammer • Version 1.0</div>
+    </div>
+
+    <div class="card">
+      <b>💰 Coin Value</b>
+      <div class="muted">100 coins = ₹1</div>
+    </div>
+  `;
+}
+
+function goMine(){
+  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
+    el.style.display="none";
+  });
+
+  $("output").style.display="block";
+  $("output").classList.add("show");
+
+  $("output").innerHTML=`
+    <h2>⚙️ Mine</h2>
+
+    <div class="card" onclick="showWallet()">
+      💳 <b>Wallet</b>
+      <div class="muted">Manage your withdrawal wallet</div>
+    </div>
+
+    <div class="card" onclick="showHistory()">
+      📜 <b>Transaction History</b>
+      <div class="muted">View earnings and withdrawals</div>
+    </div>
+
+    <div class="card" onclick="showInvite()">
+      👥 <b>Invite Friends</b>
+      <div class="muted">Share your referral link</div>
+    </div>
+
+    <div class="card" onclick="showNotifications()">
+      🔔 <b>Notifications</b>
+      <div class="muted">Manage alerts</div>
+    </div>
+
+    <div class="card" onclick="showHelp()">
+      ❓ <b>Help & Support</b>
+      <div class="muted">Get help with CoinHammer</div>
+    </div>
+
+    <div class="card" onclick="showAbout()">
+      ℹ️ <b>About</b>
+      <div class="muted">CoinHammer • Version 1.0</div>
+    </div>
+  `;
+}
+if(tg){tg.ready();tg.expand();}
+const api="https://coinhammer.onrender.com";
+let AdController=null;
+try{
+  AdController=window.Adsgram?.init?.({blockId:"48321"})||null;
+}catch(e){
+  console.log("AdsGram init skipped",e);
+}
+const tgUser=tg?.initDataUnsafe?.user;
+const id=String(tgUser?.id||"6182160586");
+const name=tgUser?.username||tgUser?.first_name||"DemoUser";
+  const startParam=tg?.initDataUnsafe?.start_param||"";
+const $=x=>document.getElementById(x);
+let balance=0,dailyEarnCount=0,dailyEarnDate="";
+async function load(){try{const r=await fetch(api+"/api/user/"+encodeURIComponent(id));const u=await r.json();balance=u.balance;dailyEarnCount=u.daily_earn_count||0;dailyEarnDate=u.daily_earn_date||"";render()}catch(e){balance=1250;render();$("notice").textContent="Demo mode — connect the backend for real data."}}
+function render(){$("balance").textContent=balance.toLocaleString("en-IN");;$("rupees").textContent="₹"+(balance/100).toFixed(2);$("todayEarn").textContent=(dailyEarnCount*100).toLocaleString("en-IN");$("adProgress").textContent=dailyEarnCount+"/5"}
+async function post(path,body){const r=await fetch(api+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw new Error(j.error||"Request failed");return j}
+async function claimReferral(){
+  if(!startParam || startParam===id) return;
+
+  try{
+    await post("/api/referral/claim",{
+      referrerId:startParam,
+      referredId:id
+    });
+  }catch(e){
+    console.log("Referral claim skipped",e);
+  }
+}
+  async function loadActivities(){
+  try{
+    const r=await fetch(api+"/api/activities/"+encodeURIComponent(id));
+    const items=await r.json();
+
+    if(!items.length){
+      $("activityList").innerHTML="No recent activity yet.";
+      return;
+    }
+
+    $("activityList").innerHTML=items.slice(0,3).map(x=>`
+      <div class="card" style="margin-top:10px;">
+  <div class="title">${x.description||x.type}</div>
+
+  <div class="muted">
+    ${x.amount>0 ? "+"+x.amount+" coins":""}
+    ${x.status ? " • "+x.status:""}
+  </div>
+
+  ${
+    x.type === "withdrawal"
+      ? `
+        <div class="muted" style="margin-top:6px;font-size:12px;">
+          🕐 Requested:
+          ${x.withdrawal_requested_at
+            ? new Date(x.withdrawal_requested_at).toLocaleString("en-IN",{
+                day:"2-digit",
+                month:"short",
+                hour:"2-digit",
+                minute:"2-digit"
+              })
+            : "—"}
+        </div>
+
+        ${
+          x.withdrawal_processed_at
+            ? `
+              <div class="muted" style="font-size:12px;">
+                ${x.status === "approved" ? "✅ Approved:" : "❌ Rejected:"}
+                ${new Date(x.withdrawal_processed_at).toLocaleString("en-IN",{
+                  day:"2-digit",
+                  month:"short",
+                  hour:"2-digit",
+                  minute:"2-digit"
+                })}
+              </div>
+            `
+            : ""
+        }
+      `
+      : ""
+  }
+</div>
+    `).join("");
+  }catch(e){
+    $("activityList").textContent="Unable to load activity.";
+  }
+  }
+  $("earn").onclick=async()=>{$("earn").disabled=true;$("timer").textContent="Opening rewarded ad...";try{const result=await AdController.show();if(!result?.done){$("timer").textContent="Ad not completed — no reward";return}const j=await post("/api/earn",{id});balance=j.balance;render();$("timer").textContent="+100 coins"}catch(e){$("notice").textContent=e.message;setTimeout(()=>$("notice").textContent="",3000)}finally{$("earn").disabled=false}}
+$("daily").onclick=async()=>{$("output").classList.remove("show");$("output").style.display="none";try{const j=await post("/api/daily",{id});balance=j.balance;render();$("notice").textContent="+250 daily bonus";setTimeout(()=>$("notice").textContent="",3000)}catch(e){$("notice").textContent=e.message;setTimeout(()=>$("notice").textContent="",3000)}}
+$("invite").onclick=goReferrals;
+$("tasks").onclick=goTasks;
+
+async function completeTask(taskId){
+  try{
+    const j=await post("/api/tasks/complete",{id,taskId});
+
+    if(j.error){
+      $("notice").textContent=j.error;
+      setTimeout(()=>$("notice").textContent="",3000);
+      return;
+    }
+
+    $("notice").textContent="Task completed! +" + (j.reward||0) + " COIN";
+    setTimeout(()=>$("notice").textContent="",3000);
+    await load();
+  }catch(e){
+  $("notice").textContent=e.message;
+  setTimeout(()=>$("notice").textContent="",3000);
+}
+}
+  // (removed legacy handler that overrode onclick="goWithdraw()" on the
+  // Withdraw card and showed the old inline #wallet panel instead of the
+  // full Withdraw page. goWithdraw() is now the only handler.)
+$("bankOption").onclick=()=>{
+  $("bankForm").style.display="block";
+  $("upiForm").style.display="none";
+};
+
+$("upiOption").onclick=()=>{
+  $("upiForm").style.display="block";
+  $("bankForm").style.display="none";
+};
+  async function submitWithdrawal(method){
+  try{
+    let amount=0;
+    let body={id,method};
+
+    if(method==="bank"){
+      const accountHolderName=$("bankName").value.trim();
+      const accountNumber=$("bankAccount").value.trim();
+      const ifsc=$("bankIfsc").value.trim();
+      amount=Number($("bankAmount").value);
+
+      if(!accountHolderName||!accountNumber||!ifsc||amount<10){
+        throw new Error("Please fill all bank details and minimum ₹10");
+      }
+
+      body.accountHolderName=accountHolderName;
+      body.accountNumber=accountNumber;
+      body.ifsc=ifsc;
+    }
+
+    if(method==="upi"){
+      const upiId=$("upiId").value.trim();
+      amount=Number($("upiAmount").value);
+
+      if(!upiId||amount<10){
+        throw new Error("Please enter UPI ID and minimum ₹10");
+      }
+
+      body.upiId=upiId;
+    }
+
+    body.amount=amount;
+
+    const j=await post("/api/withdraw",body);
+
+    balance=j.balance;
+    render();
+    await loadActivities();
+
+    $("notice").textContent="✅ Withdrawal request submitted successfully";
+
+    if(method==="bank"){
+      $("bankAmount").value="";
+    }else{
+      $("upiAmount").value="";
+    }
+
+    setTimeout(()=>$("notice").textContent="",3000);
+
+  }catch(e){
+    $("notice").textContent="❌ "+e.message;
+    setTimeout(()=>$("notice").textContent="",3000);
+  }
+}
+
+$("bankWithdraw").onclick=()=>submitWithdrawal("bank");
+$("upiWithdraw").onclick=()=>submitWithdrawal("upi");
+$("leader").onclick=async()=>{try{const list=await (await fetch(api+"/api/leaderboard")).json();$("output").classList.add("show");$("output").innerHTML="<h3>🏆 Leaderboard</h3>"+list.map((u,i)=>"<div>"+(i+1)+". "+(u.username||"User")+" — "+u.balance.toLocaleString()+"</div>").join("")}catch(e){$("notice").textContent=e.message}}
+load();
+  loadActivities();
+  let historyItems = [];
+
+async function showHistory(){
+  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
+    el.style.display="none";
+  });
+
+  $("output").style.display="none";
+  $("history").style.display="block";
+  $("history").classList.add("show");
+
+  try{
+    const r=await fetch(api+"/api/activities/"+encodeURIComponent(id));
+    historyItems=await r.json();
+    renderHistory("all");
+  }catch(e){
+    $("historyList").textContent="Unable to load history.";
+  }
+}
+
+function filterHistory(type){
+  let items = historyItems;
+
+  if(type !== "all"){
+    items = historyItems.filter(x=>{
+      const t = String(x.type||"").toLowerCase();
+
+      if(type==="task") return t.includes("task");
+      if(type==="earning") return t.includes("earn") || t.includes("bonus") || t.includes("ad");
+      if(type==="withdrawal") return t.includes("withdraw");
+      return true;
+    });
+  }
+
+  if(!items.length){
+    $("historyList").innerHTML="No history found.";
+    return;
+  }
+
+$("historyList").innerHTML = items.map(x=>{
+
+  const t = String(x.type||"").toLowerCase();
+
+  let icon = "📋";
+  let label = "Activity";
+
+  if(t.includes("task")){
+    icon = "🎯";
+    label = "Task reward";
+  }else if(t.includes("earn") || t.includes("ad")){
+    icon = "💰";
+    label = "Earning";
+  }else if(t.includes("bonus")){
+    icon = "🎁";
+    label = "Daily bonus";
+  }else if(t.includes("refer")){
+    icon = "👥";
+    label = "Referral reward";
+  }else if(t.includes("withdraw")){
+    icon = "💸";
+    label = "Withdrawal";
+  }
+
+  const date = new Date(x.created_at);
+  const today = new Date();
+
+  let dateText = date.toLocaleDateString();
+  if(date.toDateString() === today.toDateString()){
+    dateText = "Today";
+  }
+
+  const amountText =
+    x.amount > 0
+      ? "+" + x.amount + " coins"
+      : x.amount < 0
+        ? x.amount + " coins"
+        : "";
+
+  const statusText = x.status
+    ? x.status.charAt(0).toUpperCase()+x.status.slice(1)
+    : "Completed";
+
+  return `
+    <div class="card" style="
+      margin-top:10px;
+      padding:15px;
+      display:flex;
+      align-items:center;
+      gap:12px;
+    ">
+
+      <div style="
+        width:46px;
+        height:46px;
+        border-radius:14px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        background:rgba(255,193,7,.12);
+        font-size:23px;
+        flex-shrink:0;
+      ">
+        ${icon}
+      </div>
+
+      <div style="flex:1;min-width:0;">
+        <div class="title">${x.description||label}</div>
+
+        <div class="muted" style="margin-top:4px;">
+          ${dateText} • ${date.toLocaleTimeString([],{
+            hour:"2-digit",
+            minute:"2-digit"
+          })}
+        </div>
+      </div>
+
+      <div style="text-align:right;white-space:nowrap;">
+        <div style="
+          font-weight:800;
+          color:${x.amount < 0 ? "#ff8a80" : "#7cff9b"};
+        ">
+          ${amountText}
+        </div>
+
+        <div class="muted" style="
+          font-size:12px;
+          margin-top:4px;
+        ">
+          ${statusText}
+        </div>
+      </div>
+
+    </div>
+  `;
+}).join("");
+}
+
+function renderHistory(type){
+  filterHistory(type);
+}
+  claimReferral();
+  </script>
+</body></html>
