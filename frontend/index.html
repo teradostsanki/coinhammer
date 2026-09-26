@@ -687,9 +687,13 @@ async function goReferrals(){
 }
 
 function goWithdraw(){
-  document.querySelectorAll("main > section, main > .grid").forEach(el=>{
-    el.style.display="none";
-  });
+
+  $("activity").style.display="none";
+  $("history").style.display="none";
+  $("wallet").style.display="none";
+
+  document.querySelector("main > .hero").style.display="none";
+  document.querySelector("main > .grid").style.display="none";
 
   $("output").style.display="block";
   $("output").classList.add("show");
