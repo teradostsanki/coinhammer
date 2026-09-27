@@ -390,21 +390,24 @@ app.post("/api/referral/claim", async (req,res) => {
     client.release();
   }
 });
-app.get("/api/tasks", (req,res) => {
-  res.json({
-    tasks: [
-  {id:"telegram", title:"Join Telegram", reward:100, category:"social", icon:"📨"},
-  {id:"social", title:"Follow Social Media", reward:100, category:"social", icon:"📱"},
-  {id:"youtube", title:"Subscribe YouTube", reward:100, category:"social", icon:"▶️"},
-  {id:"instagram", title:"Follow Instagram", reward:100, category:"social", icon:"📷"},
-  {id:"facebook", title:"Follow Facebook", reward:100, category:"social", icon:"👍"},
-  {id:"twitter", title:"Follow X", reward:100, category:"social", icon:"✖️"},
-  {id:"channel", title:"Join Telegram Channel", reward:100, category:"social", icon:"📢"},
-  {id:"community", title:"Join Community", reward:100, category:"social", icon:"💬"},
-  {id:"share", title:"Share CoinHammer", reward:100, category:"special", icon:"🔗"},
-  {id:"visit", title:"Visit CoinHammer", reward:100, category:"apps", icon:"🌐"}
-]
-  });
+app.get("/api/tasks", async (req,res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, title, description, reward, category, icon
+      FROM tasks
+      WHERE active = TRUE
+      ORDER BY created_at ASC
+    `);
+
+    res.json({
+      tasks: result.rows
+    });
+  } catch (e) {
+    console.error("TASKS LOAD ERROR:", e);
+    res.status(500).json({
+      error: "Failed to load tasks"
+    });
+  }
 });
 app.get("/api/tasks/completed/:id", async (req,res) => {
   try {
