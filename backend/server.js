@@ -33,6 +33,14 @@ await pool.query(`
   ALTER TABLE users
   ADD COLUMN IF NOT EXISTS daily_earn_date DATE
 `);
+await pool.query(`
+  ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS streak_count INTEGER DEFAULT 0
+`);
+await pool.query(`
+  ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS last_spin_date DATE
+`);
   await pool.query(`
   CREATE TABLE IF NOT EXISTS user_tasks (
     id SERIAL PRIMARY KEY,
@@ -94,19 +102,7 @@ app.get("/health", (req,res) => {
   res.send("OK");
 });
 app.get("/api/user/:id", async (req,res) => {
-  const id = String(req.params.id);
-  const username = String(req.query.username || "TelegramUser");
-
-  const u = await getUser(id, username);
-
-  if (username && username !== "TelegramUser" && u.username !== username) {
-    const updated = await pool.query(
-      "UPDATE users SET username = $1 WHERE id = $2 RETURNING *",
-      [username, id]
-    );
-    return res.json(updated.rows[0]);
-  }
-
+  const u = await getUser(String(req.params.id));
   res.json(u);
 });
 
@@ -161,54 +157,107 @@ res.json({
   }
 });
 
+const STREAK_REWARDS = [100, 150, 200, 250, 300, 400, 500];
+
 app.post("/api/daily", async (req,res) => {
+  const client = await pool.connect();
   try {
     const id = String(req.body.id || "");
-    if(!id) return res.status(400).json({error:"Missing user id"});
+    if(!id) { client.release(); return res.status(400).json({error:"Missing user id"}); }
 
     await getUser(id);
 
     const today = new Date().toISOString().slice(0,10);
 
-    const updated = await pool.query(
-      `UPDATE users
-       SET last_daily = $1,
-           balance = balance + 250
-       WHERE id = $2
-         AND (last_daily IS NULL OR last_daily < $1::date)
-       RETURNING *`,
-      [today, id]
+    await client.query("BEGIN");
+
+    const userRow = await client.query(
+      "SELECT last_daily, streak_count FROM users WHERE id = $1 FOR UPDATE",
+      [id]
     );
 
-    if(updated.rows.length === 0){
-      return res.status(409).json({
-        error:"Daily bonus already claimed today"
-      });
+    const lastDaily = userRow.rows[0]?.last_daily
+      ? new Date(userRow.rows[0].last_daily).toISOString().slice(0,10)
+      : null;
+    const prevStreak = userRow.rows[0]?.streak_count || 0;
+
+    if (lastDaily === today) {
+      await client.query("ROLLBACK");
+      client.release();
+      return res.status(409).json({ error:"Daily bonus already claimed today" });
     }
 
-    await pool.query(
-  `INSERT INTO activities
-   (user_id, type, amount, description, status)
-   VALUES ($1, $2, $3, $4, $5)`,
-  [id, "daily", 250, "Daily bonus", "completed"]
-);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0,10);
+    const newStreak = (lastDaily === yesterday) ? (prevStreak % 7) + 1 : 1;
+    const reward = STREAK_REWARDS[newStreak - 1];
 
-res.json({
-  ok:true,
-  reward:250,
-  balance:updated.rows[0].balance
-});
+    const updated = await client.query(
+      `UPDATE users
+       SET last_daily = $1,
+           streak_count = $2,
+           balance = balance + $3
+       WHERE id = $4
+       RETURNING *`,
+      [today, newStreak, reward, id]
+    );
+
+    await client.query(
+      `INSERT INTO activities
+       (user_id, type, amount, description, status)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [id, "daily", reward, `Daily bonus (Day ${newStreak})`, "completed"]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({
+      ok:true,
+      reward,
+      streak:newStreak,
+      balance:updated.rows[0].balance
+    });
 
   } catch(e) {
+    await client.query("ROLLBACK");
     res.status(500).json({error:e.message});
+  } finally {
+    client.release();
   }
 });
 
-app.get("/api/referral/:id", (req,res) => {
-  const bot = process.env.BOT_USERNAME || "Coinhammer_bot";
-  res.json({
-    link:`https://t.me/${bot}/coinhammer?startapp=${encodeURIComponent(req.params.id)}`
-  });
+app.get("/api/referral/:id", async (req,res) => {
+  try {
+    const id = String(req.params.id);
+    const bot = process.env.BOT_USERNAME || "Coinhammer_bot";
+
+    const stats = await pool.query(
+      `SELECT
+         COUNT(*)::int AS total_referrals,
+         COALESCE(SUM(CASE WHEN reward_given THEN 500 ELSE 0 END),0)::int AS total_earned
+       FROM referrals
+       WHERE referrer_id = $1`,
+      [id]
+    );
+
+    const recent = await pool.query(
+      `SELECT r.referred_id, r.reward_given, r.created_at, u.username, u.tasks_completed
+       FROM referrals r
+       LEFT JOIN users u ON u.id = r.referred_id
+       WHERE r.referrer_id = $1
+       ORDER BY r.created_at DESC
+       LIMIT 10`,
+      [id]
+    );
+
+    res.json({
+      link:`https://t.me/${bot}/coinhammer?startapp=${encodeURIComponent(id)}`,
+      totalReferrals: stats.rows[0].total_referrals,
+      totalEarned: stats.rows[0].total_earned,
+      recent: recent.rows
+    });
+  } catch(e) {
+    res.status(500).json({error:e.message});
+  }
 });
 app.get("/api/activities/:id", async (req,res) => {
   try {
@@ -316,19 +365,31 @@ app.post("/api/referral/claim", async (req,res) => {
 app.get("/api/tasks", (req,res) => {
   res.json({
     tasks: [
-  {id:"telegram", title:"Join Telegram", reward:100},
-  {id:"social", title:"Follow Social Media", reward:100},
-  {id:"youtube", title:"Subscribe YouTube", reward:100},
-  {id:"instagram", title:"Follow Instagram", reward:100},
-  {id:"facebook", title:"Follow Facebook", reward:100},
-  {id:"twitter", title:"Follow X", reward:100},
-  {id:"channel", title:"Join Telegram Channel", reward:100},
-  {id:"community", title:"Join Community", reward:100},
-  {id:"share", title:"Share CoinHammer", reward:100},
-  {id:"visit", title:"Visit CoinHammer", reward:100}
+  {id:"telegram", title:"Join Telegram", reward:100, category:"social", icon:"📨"},
+  {id:"social", title:"Follow Social Media", reward:100, category:"social", icon:"📱"},
+  {id:"youtube", title:"Subscribe YouTube", reward:100, category:"social", icon:"▶️"},
+  {id:"instagram", title:"Follow Instagram", reward:100, category:"social", icon:"📷"},
+  {id:"facebook", title:"Follow Facebook", reward:100, category:"social", icon:"👍"},
+  {id:"twitter", title:"Follow X", reward:100, category:"social", icon:"✖️"},
+  {id:"channel", title:"Join Telegram Channel", reward:100, category:"social", icon:"📢"},
+  {id:"community", title:"Join Community", reward:100, category:"social", icon:"💬"},
+  {id:"share", title:"Share CoinHammer", reward:100, category:"special", icon:"🔗"},
+  {id:"visit", title:"Visit CoinHammer", reward:100, category:"apps", icon:"🌐"}
 ]
   });
 });
+app.get("/api/tasks/completed/:id", async (req,res) => {
+  try {
+    const result = await pool.query(
+      "SELECT task_id FROM user_tasks WHERE user_id = $1 AND reward_given = TRUE",
+      [String(req.params.id)]
+    );
+    res.json({ taskIds: result.rows.map(r => r.task_id) });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post("/api/tasks/complete", async (req,res) => {
   const id = String(req.body.id || "");
   const taskId = String(req.body.taskId || "");
@@ -649,11 +710,127 @@ await client.query(`
   }
 });
 
+app.get("/api/wallet/:id", async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const user = await getUser(id);
+
+    const earned = await pool.query(
+      `SELECT COALESCE(SUM(amount),0)::int AS total
+       FROM activities
+       WHERE user_id = $1 AND type != 'withdrawal' AND amount > 0`,
+      [id]
+    );
+
+    const withdrawn = await pool.query(
+      `SELECT COALESCE(SUM(amount),0)::numeric AS total
+       FROM withdrawals
+       WHERE user_id = $1 AND status = 'approved'`,
+      [id]
+    );
+
+    res.json({
+      balance: user.balance,
+      totalEarned: earned.rows[0].total,
+      totalWithdrawn: Math.round(Number(withdrawn.rows[0].total) * 100)
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get("/api/leaderboard", async (req,res) => {
   const result = await pool.query(
     "SELECT id, username, balance FROM users ORDER BY balance DESC LIMIT 10"
   );
   res.json(result.rows);
+});
+
+// Prizes on the spin wheel (weight = relative chance; higher weight = more common)
+const SPIN_PRIZES = [
+  { amount: 20,  weight: 30 },
+  { amount: 50,  weight: 25 },
+  { amount: 100, weight: 20 },
+  { amount: 150, weight: 12 },
+  { amount: 200, weight: 7 },
+  { amount: 500, weight: 4 },
+  { amount: 1000, weight: 2 }
+];
+
+function pickSpinPrize() {
+  const totalWeight = SPIN_PRIZES.reduce((s, p) => s + p.weight, 0);
+  let r = Math.random() * totalWeight;
+  for (const p of SPIN_PRIZES) {
+    if (r < p.weight) return p.amount;
+    r -= p.weight;
+  }
+  return SPIN_PRIZES[0].amount;
+}
+
+app.get("/api/spin/status/:id", async (req, res) => {
+  const id = String(req.params.id);
+  await getUser(id);
+  const u = await pool.query("SELECT last_spin_date FROM users WHERE id = $1", [id]);
+  const today = new Date().toISOString().slice(0, 10);
+  const lastSpin = u.rows[0]?.last_spin_date
+    ? new Date(u.rows[0].last_spin_date).toISOString().slice(0, 10)
+    : null;
+  res.json({ canSpin: lastSpin !== today });
+});
+
+app.post("/api/spin", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const id = String(req.body.id || "");
+    if (!id) { client.release(); return res.status(400).json({ error: "Missing user id" }); }
+
+    await getUser(id);
+    const today = new Date().toISOString().slice(0, 10);
+
+    await client.query("BEGIN");
+
+    const userRow = await client.query(
+      "SELECT last_spin_date FROM users WHERE id = $1 FOR UPDATE",
+      [id]
+    );
+
+    const lastSpin = userRow.rows[0]?.last_spin_date
+      ? new Date(userRow.rows[0].last_spin_date).toISOString().slice(0, 10)
+      : null;
+
+    if (lastSpin === today) {
+      await client.query("ROLLBACK");
+      client.release();
+      return res.status(409).json({ error: "You already spun today. Come back tomorrow!" });
+    }
+
+    const reward = pickSpinPrize();
+
+    const updated = await client.query(
+      `UPDATE users
+       SET last_spin_date = $1,
+           balance = balance + $2
+       WHERE id = $3
+       RETURNING *`,
+      [today, reward, id]
+    );
+
+    await client.query(
+      `INSERT INTO activities
+       (user_id, type, amount, description, status)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [id, "spin", reward, "Spin & Earn reward", "completed"]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({ ok: true, reward, balance: updated.rows[0].balance });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
 });
 app.get("/api/admin/stats", async (req, res) => {
   if (req.headers["x-admin-key"] !== process.env.ADMIN_KEY) {
@@ -814,24 +991,6 @@ tasks_completed, last_daily
   } catch (error) {
     console.error("MASTER BOT USERS ERROR:", error);
     await masterSend(chatId, "❌ Failed to load users.");
-  }
-
-  return;
-  }
-  if (text === "/deletedemo") {
-  try {
-    await pool.query("DELETE FROM activities WHERE user_id = 'demo-user'");
-    await pool.query("DELETE FROM user_tasks WHERE user_id = 'demo-user'");
-    await pool.query(
-      "DELETE FROM referrals WHERE referrer_id = 'demo-user' OR referred_id = 'demo-user'"
-    );
-    await pool.query("DELETE FROM withdrawals WHERE user_id = 'demo-user'");
-    await pool.query("DELETE FROM users WHERE id = 'demo-user'");
-
-    await masterSend(chatId, "✅ Demo user deleted successfully.");
-  } catch (error) {
-    console.error("DELETE DEMO USER ERROR:", error);
-    await masterSend(chatId, "❌ Failed to delete demo user.");
   }
 
   return;
