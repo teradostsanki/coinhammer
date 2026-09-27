@@ -1026,6 +1026,38 @@ tasks_completed, last_daily
 
   return;
   }
+  if (text === "/tasks") {
+  try {
+    const result = await pool.query(`
+      SELECT id, title, description, reward, category, icon, active
+      FROM tasks
+      ORDER BY created_at ASC
+    `);
+
+    if (!result.rows.length) {
+      await masterSend(chatId, "📋 No tasks found.");
+      return;
+    }
+
+    let msg = "📋 CoinHammer Tasks\n\n";
+
+    for (const t of result.rows) {
+      msg +=
+        `${t.active ? "🟢" : "🔴"} ${t.icon || "🎯"} ${t.title}\n` +
+        `🆔 ID: ${t.id}\n` +
+        `💰 Reward: ${t.reward} coins\n` +
+        `📂 Category: ${t.category}\n` +
+        `📝 ${t.description || "No description"}\n\n`;
+    }
+
+    await masterSend(chatId, msg);
+  } catch (error) {
+    console.error("MASTER BOT TASKS ERROR:", error);
+    await masterSend(chatId, "❌ Failed to load tasks.");
+  }
+
+  return;
+  }
 if (text === "/withdrawals") {
   try {
     const result = await pool.query(`
