@@ -50,6 +50,34 @@ await pool.query(`
     UNIQUE(user_id, task_id)
   );
 `);
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS tasks (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      reward INTEGER NOT NULL DEFAULT 100,
+      category TEXT NOT NULL DEFAULT 'social',
+      icon TEXT DEFAULT '🎯',
+      active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await pool.query(`
+    INSERT INTO tasks (id, title, description, reward, category, icon)
+    VALUES
+      ('telegram', 'Join Telegram', 'Join CoinHammer Telegram', 100, 'social', '📨'),
+      ('social', 'Follow Social Media', 'Follow CoinHammer social media', 100, 'social', '📱'),
+      ('youtube', 'Subscribe YouTube', 'Subscribe to CoinHammer YouTube', 100, 'social', '▶️'),
+      ('instagram', 'Follow Instagram', 'Follow CoinHammer Instagram', 100, 'social', '📷'),
+      ('facebook', 'Follow Facebook', 'Follow CoinHammer Facebook', 100, 'social', '👍'),
+      ('twitter', 'Follow X', 'Follow CoinHammer on X', 100, 'social', '✖️'),
+      ('channel', 'Join Telegram Channel', 'Join our Telegram channel', 100, 'social', '📢'),
+      ('community', 'Join Community', 'Join CoinHammer community', 100, 'social', '💬'),
+      ('share', 'Share CoinHammer', 'Share CoinHammer with friends', 100, 'special', '🔗'),
+      ('visit', 'Visit CoinHammer', 'Visit CoinHammer website', 100, 'apps', '🌐')
+    ON CONFLICT (id) DO NOTHING;
+  `);
   await pool.query(`
   ALTER TABLE user_tasks
   ADD COLUMN IF NOT EXISTS reward_given BOOLEAN DEFAULT FALSE
