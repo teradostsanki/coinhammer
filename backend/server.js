@@ -952,7 +952,8 @@ async function handleMasterMessage(message) {
 "Available command:\n" +
 "/stats - View bot statistics\n" +
 "/users - View users\n" +
-"/withdrawals - View pending withdrawals"
+"/withdrawals - View pending withdrawals\n" +
+"/tasks - View all tasks"
     );
     return;
   }
