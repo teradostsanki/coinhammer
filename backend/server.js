@@ -1157,7 +1157,7 @@ if (text === "/withdrawals") {
 
         await pool.query(`
   UPDATE activities
-  SET amount = 0,
+  SET amount = -$3,
       description = $1,
       status = 'approved'
   WHERE id = (
