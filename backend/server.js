@@ -455,6 +455,21 @@ app.post("/api/tasks/complete", async (req,res) => {
        RETURNING id`,
       [id, taskId]
     );
+        const taskInfoResult = await client.query(
+      `SELECT reward FROM tasks
+       WHERE id = $1 AND active = TRUE`,
+      [taskId]
+    );
+
+    if (taskInfoResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({
+        error: "Task not found or inactive"
+      });
+    }
+
+    const taskReward = Number(taskInfoResult.rows[0].reward);
+    const randomReward = Math.floor(Math.random() * taskReward) + 1;
 
     // Old completed task: recover missing reward once
     if (taskResult.rows.length === 0) {
@@ -468,7 +483,7 @@ app.post("/api/tasks/complete", async (req,res) => {
       if (existingTask.rows[0]?.reward_given === false) {
         const recoveredUser = await client.query(
           `UPDATE users
-           SET balance = balance + 100
+           SET balance = balance + randomReward
            WHERE id = $1
            RETURNING *`,
           [id]
@@ -486,7 +501,7 @@ app.post("/api/tasks/complete", async (req,res) => {
         return res.json({
           ok: true,
           task_id: taskId,
-          reward: 100,
+          reward: randomReward,
           balance: recoveredUser.rows[0].balance,
           recovered: true
         });
@@ -503,10 +518,10 @@ app.post("/api/tasks/complete", async (req,res) => {
     const updatedUser = await client.query(
       `UPDATE users
        SET tasks_completed = tasks_completed + 1,
-           balance = balance + 100
+           balance = balance + randomReward
        WHERE id = $1
        RETURNING *`,
-      [id]
+      [id, randomReward]
     );
 
     const user = updatedUser.rows[0];
@@ -546,7 +561,7 @@ app.post("/api/tasks/complete", async (req,res) => {
       ok: true,
       task_id: taskId,
       tasks_completed: user.tasks_completed,
-      reward: 100,
+      reward: randomReward,
       balance: user.balance,
       referral_reward: referralReward
     });
