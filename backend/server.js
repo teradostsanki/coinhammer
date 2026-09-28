@@ -1165,6 +1165,110 @@ tasks_completed, last_daily
 
   return;
   }
+  if (text.startsWith("/edittask")) {
+  try {
+    const raw = text.slice("/edittask".length).trim();
+
+    if (!raw) {
+      await masterSend(
+        chatId,
+        "❌ Format:\n\n" +
+        "/edittask ID | Title | Description | MaxReward | Category | Icon | Link | Active\n\n" +
+        "Example:\n" +
+        "/edittask insta1 | Follow Instagram | Follow our new Instagram page | 150 | social | 📷 | https://instagram.com/yourpage | true"
+      );
+      return;
+    }
+
+    const parts = raw.split("|").map(v => v.trim());
+
+    if (parts.length !== 8) {
+      await masterSend(
+        chatId,
+        "❌ Invalid format.\n\n" +
+        "Use exactly 8 fields:\n\n" +
+        "ID | Title | Description | MaxReward | Category | Icon | Link | Active"
+      );
+      return;
+    }
+
+    const [id, title, description, reward, category, icon, link, activeText] = parts;
+
+    const maxReward = Number(reward);
+    const active = activeText.toLowerCase() === "true";
+
+    if (
+      !id ||
+      !title ||
+      !description ||
+      !Number.isInteger(maxReward) ||
+      maxReward <= 0 ||
+      !link ||
+      !["true", "false"].includes(activeText.toLowerCase())
+    ) {
+      await masterSend(
+        chatId,
+        "❌ Invalid task details.\n\n" +
+        "MaxReward must be a positive whole number.\n" +
+        "Active must be true or false."
+      );
+      return;
+    }
+
+    const existing = await pool.query(
+      "SELECT id FROM tasks WHERE id = $1",
+      [id]
+    );
+
+    if (!existing.rows.length) {
+      await masterSend(
+        chatId,
+        `❌ Task ID "${id}" not found.\n\nUse /tasks to see existing task IDs.`
+      );
+      return;
+    }
+
+    await pool.query(
+      `UPDATE tasks
+       SET title = $2,
+           description = $3,
+           reward = $4,
+           category = $5,
+           icon = $6,
+           link = $7,
+           active = $8
+       WHERE id = $1`,
+      [
+        id,
+        title,
+        description,
+        maxReward,
+        category || "social",
+        icon || "🎯",
+        link,
+        active
+      ]
+    );
+
+    await masterSend(
+      chatId,
+      "✅ Task updated successfully!\n\n" +
+      `🆔 ID: ${id}\n` +
+      `📌 ${title}\n` +
+      `📝 ${description}\n` +
+      `💰 Max Reward: ${maxReward} coins\n` +
+      `📂 Category: ${category || "social"}\n` +
+      `🔗 ${link}\n` +
+      `⚡ Active: ${active}`
+    );
+
+  } catch (error) {
+    console.error("MASTER BOT EDIT TASK ERROR:", error);
+    await masterSend(chatId, "❌ Failed to update task.");
+  }
+
+  return;
+  }
 if (text === "/withdrawals") {
   try {
     const result = await pool.query(`
