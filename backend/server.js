@@ -1087,6 +1087,84 @@ tasks_completed, last_daily
 
   return;
   }
+  if (text.startsWith("/addtask")) {
+  try {
+    const raw = text.slice("/addtask".length).trim();
+
+    if (!raw) {
+      await masterSend(
+        chatId,
+        "❌ Format:\n\n" +
+        "/addtask ID | Title | Description | MaxReward | Category | Icon | Link\n\n" +
+        "Example:\n" +
+        "/addtask insta1 | Follow Instagram | Follow our Instagram page | 100 | social | 📷 | https://instagram.com/yourpage"
+      );
+      return;
+    }
+
+    const parts = raw.split("|").map(v => v.trim());
+
+    if (parts.length !== 7) {
+      await masterSend(
+        chatId,
+        "❌ Invalid format.\n\n" +
+        "Use exactly 7 fields:\n\n" +
+        "ID | Title | Description | MaxReward | Category | Icon | Link"
+      );
+      return;
+    }
+
+    const [id, title, description, reward, category, icon, link] = parts;
+
+    const maxReward = Number(reward);
+
+    if (!id || !title || !description || !Number.isInteger(maxReward) || maxReward <= 0 || !link) {
+      await masterSend(
+        chatId,
+        "❌ Invalid task details.\n\n" +
+        "ID, Title, Description, MaxReward and Link are required."
+      );
+      return;
+    }
+
+    const existing = await pool.query(
+      "SELECT id FROM tasks WHERE id = $1",
+      [id]
+    );
+
+    if (existing.rows.length) {
+      await masterSend(
+        chatId,
+        `❌ Task ID "${id}" already exists.\n\nUse /edittask to change it.`
+      );
+      return;
+    }
+
+    await pool.query(
+      `INSERT INTO tasks
+       (id, title, description, reward, category, icon, link, active)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)`,
+      [id, title, description, maxReward, category || "social", icon || "🎯", link]
+    );
+
+    await masterSend(
+      chatId,
+      "✅ Task added successfully!\n\n" +
+      `🆔 ID: ${id}\n` +
+      `📌 ${title}\n` +
+      `📝 ${description}\n` +
+      `💰 Max Reward: ${maxReward} coins\n` +
+      `📂 Category: ${category || "social"}\n` +
+      `🔗 ${link}`
+    );
+
+  } catch (error) {
+    console.error("MASTER BOT ADD TASK ERROR:", error);
+    await masterSend(chatId, "❌ Failed to add task.");
+  }
+
+  return;
+  }
 if (text === "/withdrawals") {
   try {
     const result = await pool.query(`
