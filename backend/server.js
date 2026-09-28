@@ -52,16 +52,20 @@ await pool.query(`
 `);
     await pool.query(`
     CREATE TABLE IF NOT EXISTS tasks (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      description TEXT DEFAULT '',
-      reward INTEGER NOT NULL DEFAULT 100,
-      category TEXT NOT NULL DEFAULT 'social',
-      icon TEXT DEFAULT '🎯',
-      active BOOLEAN DEFAULT TRUE,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  reward INTEGER NOT NULL DEFAULT 100,
+  category TEXT NOT NULL DEFAULT 'social',
+  icon TEXT DEFAULT '🎯',
+  link TEXT DEFAULT '',
+  active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+await pool.query(`
+  ALTER TABLE tasks
+  ADD COLUMN IF NOT EXISTS link TEXT DEFAULT ''
+`);
 
   await pool.query(`
     INSERT INTO tasks (id, title, description, reward, category, icon)
@@ -399,7 +403,7 @@ app.post("/api/referral/claim", async (req,res) => {
 app.get("/api/tasks", async (req,res) => {
   try {
     const result = await pool.query(`
-      SELECT id, title, description, reward, category, icon
+      SELECT id, title, description, reward, category, icon, link
       FROM tasks
       WHERE active = TRUE
       ORDER BY created_at ASC
