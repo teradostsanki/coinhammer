@@ -50,18 +50,19 @@ await pool.query(`
     UNIQUE(user_id, task_id)
   );
 `);
-    await pool.query(`
-    CREATE TABLE IF NOT EXISTS tasks (
-  id TEXT PRIMARY KEY,
-  title TEXT NOT NULL,
-  description TEXT DEFAULT '',
-  reward INTEGER NOT NULL DEFAULT 100,
-  category TEXT NOT NULL DEFAULT 'social',
-  icon TEXT DEFAULT '🎯',
-  link TEXT DEFAULT '',
-  active BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS tasks (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    reward INTEGER NOT NULL DEFAULT 100,
+    category TEXT NOT NULL DEFAULT 'social',
+    icon TEXT DEFAULT '🎯',
+    link TEXT DEFAULT '',
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+`);
 
   await pool.query(`
     INSERT INTO tasks (id, title, description, reward, category, icon)
