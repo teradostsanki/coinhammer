@@ -299,10 +299,16 @@ app.get("/api/activities/:id", async (req,res) => {
      w.created_at AS withdrawal_requested_at,
      w.processed_at AS withdrawal_processed_at
    FROM activities a
-   LEFT JOIN withdrawals w
-     ON w.user_id = a.user_id
-     AND a.type = 'withdrawal'
-     AND a.description LIKE 'Withdrawal ₹' || w.amount::text || '%'
+   LEFT JOIN LATERAL (
+  SELECT created_at, processed_at
+  FROM withdrawals
+  WHERE user_id = a.user_id
+    AND a.type = 'withdrawal'
+    AND a.description LIKE 'Withdrawal ₹' || amount::text || '%'
+    AND created_at <= a.created_at
+  ORDER BY created_at DESC
+  LIMIT 1
+) w ON TRUE
    WHERE a.user_id = $1
    ORDER BY a.created_at DESC
    LIMIT 20`,
