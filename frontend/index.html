@@ -414,7 +414,7 @@ async function renderTasks(){
         <div class="task-title">${t.title}</div>
         <div class="task-reward">+${t.reward} COIN</div>
       </div>
-      <button class="task-btn ${done?'done':''}" type="button" ${done?'disabled':''} onclick="completeTask('${t.id}')">${done?'✓ Done':'Start'}</button>
+      <button class="task-btn ${done?'done':''}" type="button" ${done?'disabled':''} onclick="startTask('${t.id}', '${t.link||""}')">${done?'✓ Done':'Start'}</button>
     </div>
   `;
   }).join("");
@@ -1008,7 +1008,15 @@ async function watchAdAndEarn(){
   }
 }
 $("earn").onclick=watchAdAndEarn;
+function startTask(taskId, link){
+  if(link){
+    window.open(link, "_blank");
+  }
 
+  setTimeout(()=>{
+    completeTask(taskId);
+  }, 1000);
+}
 async function completeTask(taskId){
   try{
     const j=await post("/api/tasks/complete",{id,taskId});
