@@ -974,11 +974,14 @@ async function handleMasterMessage(message) {
       chatId,
       "🔐 CoinHammer Master Admin Bot\n\n" +
 "Welcome Admin!\n\n" +
-"Available command:\n" +
+"Available commands:\n" +
 "/stats - View bot statistics\n" +
 "/users - View users\n" +
 "/withdrawals - View pending withdrawals\n" +
-"/tasks - View all tasks"
+"/tasks - View all tasks\n" +
+"/addtask - Add a new task\n" +
+"/edittask - Edit an existing task\n" +
+"/deletetask - Delete a task"
     );
     return;
   }
