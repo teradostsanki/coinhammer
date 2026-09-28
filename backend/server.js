@@ -970,21 +970,33 @@ async function handleMasterMessage(message) {
   }
 
   if (text === "/start") {
-    await masterSend(
-      chatId,
-      "🔐 CoinHammer Master Admin Bot\n\n" +
-"Welcome Admin!\n\n" +
-"Available commands:\n" +
-"/stats - View bot statistics\n" +
-"/users - View users\n" +
-"/withdrawals - View pending withdrawals\n" +
-"/tasks - View all tasks\n" +
-"/addtask - Add a new task\n" +
-"/edittask - Edit an existing task\n" +
-"/deletetask - Delete a task"
-    );
-    return;
-  }
+  await masterSend(
+    chatId,
+    "🔐 CoinHammer Master Admin Bot\n\n" +
+    "Welcome Admin!\n\n" +
+    "Select an option:",
+    {
+      inline_keyboard: [
+        [
+          { text: "📊 Statistics", callback_data: "admin_stats" },
+          { text: "👥 Users", callback_data: "admin_users" }
+        ],
+        [
+          { text: "💸 Withdrawals", callback_data: "admin_withdrawals" },
+          { text: "📋 Tasks", callback_data: "admin_tasks" }
+        ],
+        [
+          { text: "➕ Add Task", callback_data: "admin_addtask" },
+          { text: "✏️ Edit Task", callback_data: "admin_edittask" }
+        ],
+        [
+          { text: "🗑️ Delete Task", callback_data: "admin_deletetask" }
+        ]
+      ]
+    }
+  );
+  return;
+}
 
   if (text === "/stats") {
     try {
