@@ -63,7 +63,10 @@ await pool.query(`
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
 `);
-
+await pool.query(`
+  ALTER TABLE tasks
+  ADD COLUMN IF NOT EXISTS link TEXT DEFAULT ''
+`);
   await pool.query(`
     INSERT INTO tasks (id, title, description, reward, category, icon)
     VALUES
