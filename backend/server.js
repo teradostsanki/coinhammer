@@ -1269,6 +1269,53 @@ tasks_completed, last_daily
 
   return;
   }
+  if (text.startsWith("/deletetask")) {
+  try {
+    const id = text.slice("/deletetask".length).trim();
+
+    if (!id) {
+      await masterSend(
+        chatId,
+        "❌ Format:\n\n" +
+        "/deletetask TASK_ID\n\n" +
+        "Example:\n" +
+        "/deletetask insta1"
+      );
+      return;
+    }
+
+    const existing = await pool.query(
+      "SELECT id, title FROM tasks WHERE id = $1",
+      [id]
+    );
+
+    if (!existing.rows.length) {
+      await masterSend(
+        chatId,
+        `❌ Task ID "${id}" not found.`
+      );
+      return;
+    }
+
+    await pool.query(
+      "DELETE FROM tasks WHERE id = $1",
+      [id]
+    );
+
+    await masterSend(
+      chatId,
+      "✅ Task deleted successfully!\n\n" +
+      `🆔 ID: ${id}\n` +
+      `📌 ${existing.rows[0].title}`
+    );
+
+  } catch (error) {
+    console.error("MASTER BOT DELETE TASK ERROR:", error);
+    await masterSend(chatId, "❌ Failed to delete task.");
+  }
+
+  return;
+  }
 if (text === "/withdrawals") {
   try {
     const result = await pool.query(`
