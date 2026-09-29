@@ -135,6 +135,15 @@ await pool.query(`
   await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS task_id TEXT`);
   await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS withdrawal_id INTEGER`);
   await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS referral_id INTEGER`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS admin_states (
+      chat_id TEXT PRIMARY KEY,
+      mode TEXT NOT NULL,
+      state JSONB NOT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
 };
 const app = express();
 initDb().catch(err => console.error("Database init error:", err));
@@ -1294,16 +1303,59 @@ async function verifyTelegramMembership(userId, chatId) {
 let masterBotOffset = 0;
 
 async function masterTelegram(method, body = {}) {
-  const response = await fetch(
-    `https://api.telegram.org/bot${MASTER_BOT_TOKEN}/${method}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
+  try {
+    const response = await fetch(
+      `https://api.telegram.org/bot${MASTER_BOT_TOKEN}/${method}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      }
+    );
+
+    const data = await response.json();
+
+    if (!data.ok) {
+      console.error(`MASTER TELEGRAM API ERROR [${method}]:`, {
+        status: response.status,
+        error_code: data.error_code,
+        description: data.description
+      });
     }
+
+    return data;
+  } catch (error) {
+    console.error(`MASTER TELEGRAM NETWORK ERROR [${method}]:`, error.message);
+    return { ok: false, error_code: 0, description: error.message };
+  }
+}
+
+async function saveMasterState(chatId, mode, state) {
+  await pool.query(
+    `INSERT INTO admin_states (chat_id, mode, state, updated_at)
+     VALUES ($1, $2, $3::jsonb, CURRENT_TIMESTAMP)
+     ON CONFLICT (chat_id)
+     DO UPDATE SET mode = EXCLUDED.mode,
+                   state = EXCLUDED.state,
+                   updated_at = CURRENT_TIMESTAMP`,
+    [chatId, mode, JSON.stringify(state)]
+  );
+}
+
+async function loadMasterState(chatId) {
+  const result = await pool.query(
+    `SELECT mode, state FROM admin_states WHERE chat_id = $1`,
+    [chatId]
   );
 
-  return response.json();
+  if (!result.rows.length) return null;
+  return result.rows[0];
+}
+
+async function clearMasterState(chatId) {
+  await pool.query(`DELETE FROM admin_states WHERE chat_id = $1`, [chatId]);
+  global.masterTaskEditState?.delete(chatId);
+  global.masterTaskAddState?.delete(chatId);
 }
 
 async function masterSend(chatId, text, replyMarkup = null) {
@@ -1330,9 +1382,27 @@ async function handleMasterMessage(message) {
     await masterSend(chatId, "⛔ Unauthorized access.");
     return;
   }
-    if (text === "/cancel") {
-    global.masterTaskEditState?.delete(chatId);
-    global.masterTaskAddState?.delete(chatId);
+
+  if (!global.masterTaskEditState) global.masterTaskEditState = new Map();
+  if (!global.masterTaskAddState) global.masterTaskAddState = new Map();
+
+  if (!global.masterTaskEditState.has(chatId) && !global.masterTaskAddState.has(chatId)) {
+    try {
+      const saved = await loadMasterState(chatId);
+      if (saved?.mode === "edit") {
+        global.masterTaskEditState.set(chatId, saved.state);
+        console.log("MASTER EDIT STATE RESTORED:", chatId, saved.state.step);
+      } else if (saved?.mode === "add") {
+        global.masterTaskAddState.set(chatId, saved.state);
+        console.log("MASTER ADD STATE RESTORED:", chatId, saved.state.step);
+      }
+    } catch (error) {
+      console.error("MASTER STATE LOAD ERROR:", error);
+    }
+  }
+
+  if (text === "/cancel") {
+    try { await clearMasterState(chatId); } catch (error) { console.error("MASTER STATE CLEAR ERROR:", error); }
     await masterSend(chatId, "❎ Current admin operation cancelled.");
     return;
   }
@@ -1343,6 +1413,7 @@ async function handleMasterMessage(message) {
     if (state.step === 1) {
       state.title = text;
       state.step = 2;
+      await saveMasterState(chatId, "edit", state);
 
       await masterSend(
         chatId,
@@ -1354,6 +1425,7 @@ async function handleMasterMessage(message) {
     if (state.step === 2) {
       state.description = text;
       state.step = 3;
+      await saveMasterState(chatId, "edit", state);
 
       await masterSend(
         chatId,
@@ -1375,6 +1447,7 @@ async function handleMasterMessage(message) {
 
       state.reward = reward;
       state.step = 4;
+      await saveMasterState(chatId, "edit", state);
 
       await masterSend(
         chatId,
@@ -1386,6 +1459,7 @@ async function handleMasterMessage(message) {
     if (state.step === 4) {
       state.category = text;
       state.step = 5;
+      await saveMasterState(chatId, "edit", state);
 
       await masterSend(
         chatId,
@@ -1397,6 +1471,7 @@ async function handleMasterMessage(message) {
     if (state.step === 5) {
       state.icon = text;
       state.step = 6;
+      await saveMasterState(chatId, "edit", state);
 
       await masterSend(
         chatId,
@@ -1412,6 +1487,7 @@ async function handleMasterMessage(message) {
         text.toLowerCase() === "skip" ? "" : text;
 
       state.step = 7;
+      await saveMasterState(chatId, "edit", state);
 
       await masterSend(
         chatId,
@@ -1489,7 +1565,7 @@ async function handleMasterMessage(message) {
         );
       }
 
-      global.masterTaskEditState.delete(chatId);
+      await clearMasterState(chatId);
       return;
     }
   }
@@ -1499,6 +1575,7 @@ async function handleMasterMessage(message) {
     if (state.step === 1) {
       state.id = text;
       state.step = 2;
+      await saveMasterState(chatId, "add", state);
       await masterSend(chatId, "📝 Task Title bhejo:");
       return;
     }
@@ -1506,6 +1583,7 @@ async function handleMasterMessage(message) {
     if (state.step === 2) {
       state.title = text;
       state.step = 3;
+      await saveMasterState(chatId, "add", state);
       await masterSend(chatId, "📄 Task Description bhejo:");
       return;
     }
@@ -1513,6 +1591,7 @@ async function handleMasterMessage(message) {
     if (state.step === 3) {
       state.description = text;
       state.step = 4;
+      await saveMasterState(chatId, "add", state);
       await masterSend(chatId, "💰 Maximum Reward bhejo:\n\nExample: 100");
       return;
     }
@@ -1527,6 +1606,7 @@ async function handleMasterMessage(message) {
 
       state.reward = reward;
       state.step = 5;
+      await saveMasterState(chatId, "add", state);
       await masterSend(chatId, "📂 Category bhejo:\n\nExample: social");
       return;
     }
@@ -1534,6 +1614,7 @@ async function handleMasterMessage(message) {
     if (state.step === 5) {
       state.category = text;
       state.step = 6;
+      await saveMasterState(chatId, "add", state);
       await masterSend(chatId, "🎨 Icon/Emoji bhejo:\n\nExample: 📷");
       return;
     }
@@ -1541,6 +1622,7 @@ async function handleMasterMessage(message) {
     if (state.step === 6) {
       state.icon = text;
       state.step = 7;
+      await saveMasterState(chatId, "add", state);
       await masterSend(
         chatId,
         "🔗 Task Link bhejo:\n\n" +
@@ -1589,13 +1671,12 @@ async function handleMasterMessage(message) {
         );
       }
 
-      global.masterTaskAddState.delete(chatId);
+      await clearMasterState(chatId);
       return;
     }
   }
   if (text === "/start") {
-  global.masterTaskEditState?.delete(chatId);
-  global.masterTaskAddState?.delete(chatId);
+  await clearMasterState(chatId);
   await masterSend(
     chatId,
     "🔐 CoinHammer Master Admin Bot\n\n" +
@@ -2174,12 +2255,22 @@ async function masterBotLoop() {
       allowed_updates: ["message", "callback_query"]
     });
 
+    if (!result.ok) {
+      console.error("MASTER BOT getUpdates FAILED:", result.error_code, result.description);
+    }
+
     if (result.ok && result.result) {
+      console.log("MASTER BOT UPDATES:", result.result.length);
       for (const update of result.result) {
         masterBotOffset = update.update_id + 1;
+        console.log("MASTER BOT UPDATE:", update.update_id, update.message?.text || update.callback_query?.data || "unknown");
 
         if (update.message) {
-          await handleMasterMessage(update.message);
+          try {
+            await handleMasterMessage(update.message);
+          } catch (error) {
+            console.error("MASTER MESSAGE HANDLER ERROR:", error);
+          }
         }
                 if (update.callback_query) {
           const callback = update.callback_query;
@@ -2343,7 +2434,7 @@ if (data.startsWith("admin_edit_task_")) {
       global.masterTaskEditState = new Map();
     }
 
-    global.masterTaskEditState.set(callbackChatId, {
+    const editState = {
       taskId: task.id,
       title: task.title || "",
       description: task.description || "",
@@ -2353,7 +2444,10 @@ if (data.startsWith("admin_edit_task_")) {
       link: task.link || "",
       active: task.active !== false,
       step: 1
-    });
+    };
+
+    global.masterTaskEditState.set(callbackChatId, editState);
+    await saveMasterState(callbackChatId, "edit", editState);
 
     await masterSend(
       callbackChatId,
@@ -2510,9 +2604,9 @@ if (data.startsWith("admin_edit_task_")) {
             global.masterTaskAddState = new Map();
           }
 
-          global.masterTaskAddState.set(callbackChatId, {
-            step: 1
-          });                      
+          const addState = { step: 1 };
+          global.masterTaskAddState.set(callbackChatId, addState);
+          await saveMasterState(callbackChatId, "add", addState);
           await masterSend(
             callbackChatId,
             "➕ Add New Task\n\n" +
