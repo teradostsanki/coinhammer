@@ -50,6 +50,11 @@ await pool.query(`
     UNIQUE(user_id, task_id)
   );
 `);
+  await pool.query(`
+  ALTER TABLE user_tasks
+  ADD COLUMN IF NOT EXISTS telegram_verified
+  BOOLEAN DEFAULT FALSE
+`);
 await pool.query(`
   CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
@@ -430,7 +435,115 @@ app.get("/api/tasks/completed/:id", async (req,res) => {
     res.status(500).json({ error: e.message });
   }
 });
+app.post("/api/tasks/verify", async (req,res) => {
+  const id = String(req.body.id || "");
+  const taskId = String(req.body.taskId || "");
 
+  if (!id || !taskId) {
+    return res.status(400).json({
+      error: "Missing user id or task id"
+    });
+  }
+
+  try {
+    const taskResult = await pool.query(
+      `SELECT id, category, link, active
+       FROM tasks
+       WHERE id = $1 AND active = TRUE`,
+      [taskId]
+    );
+
+    if (taskResult.rows.length === 0) {
+      return res.status(404).json({
+        error: "Task not found or inactive"
+      });
+    }
+
+    const task = taskResult.rows[0];
+
+    if (
+      !["telegram", "social"].includes(
+        String(task.category).toLowerCase()
+      )
+    ) {
+      return res.status(400).json({
+        error: "This task is not a Telegram verification task"
+      });
+    }
+
+    if (!task.link) {
+      return res.status(400).json({
+        error: "Telegram task link is missing"
+      });
+    }
+
+    let telegramUsername = "";
+
+    try {
+      const url = new URL(task.link);
+
+      if (
+        url.hostname !== "t.me" &&
+        url.hostname !== "www.t.me" &&
+        url.hostname !== "telegram.me" &&
+        url.hostname !== "www.telegram.me"
+      ) {
+        return res.status(400).json({
+          error: "Invalid Telegram task link"
+        });
+      }
+
+      const parts = url.pathname
+        .split("/")
+        .filter(Boolean);
+
+      if (!parts.length || parts[0].startsWith("+")) {
+        return res.status(400).json({
+          error: "Private Telegram invite links are not supported yet"
+        });
+      }
+
+      telegramUsername = "@" + parts[0].replace(/^@/, "");
+    } catch (e) {
+      return res.status(400).json({
+        error: "Invalid Telegram task link"
+      });
+    }
+
+    const verified = await verifyTelegramMembership(
+      id,
+      telegramUsername
+    );
+
+    if (!verified) {
+      return res.status(403).json({
+        verified: false,
+        error: "Please join the Telegram channel/group first"
+      });
+    }
+
+    await pool.query(
+      `INSERT INTO user_tasks
+       (user_id, task_id, telegram_verified, reward_given)
+       VALUES ($1, $2, TRUE, FALSE)
+       ON CONFLICT (user_id, task_id)
+       DO UPDATE SET telegram_verified = TRUE`,
+      [id, taskId]
+    );
+
+    return res.json({
+      verified: true,
+      task_id: taskId
+    });
+
+  } catch (error) {
+    console.error("TASK VERIFY ERROR:", error);
+
+    return res.status(500).json({
+      error: "Telegram verification failed"
+    });
+  }
+});
 app.post("/api/tasks/complete", async (req,res) => {
   const id = String(req.body.id || "");
   const taskId = String(req.body.taskId || "");
@@ -438,6 +551,47 @@ app.post("/api/tasks/complete", async (req,res) => {
   if (!id || !taskId) {
     return res.status(400).json({
       error: "Missing user id or task id"
+    });
+  }
+    const verificationResult = await pool.query(
+    `SELECT telegram_verified
+     FROM user_tasks
+     WHERE user_id = $1 AND task_id = $2`,
+    [id, taskId]
+  );
+
+  const taskForVerification = await pool.query(
+    `SELECT category, link
+     FROM tasks
+     WHERE id = $1 AND active = TRUE`,
+    [taskId]
+  );
+
+  if (taskForVerification.rows.length === 0) {
+    return res.status(404).json({
+      error: "Task not found or inactive"
+    });
+  }
+
+  const taskCategory = String(
+    taskForVerification.rows[0].category || ""
+  ).toLowerCase();
+
+  const taskLink = String(
+    taskForVerification.rows[0].link || ""
+  ).toLowerCase();
+
+  const isTelegramTask =
+    taskLink.includes("t.me/") ||
+    taskLink.includes("telegram.me/");
+
+  if (
+    isTelegramTask &&
+    !verificationResult.rows[0]?.telegram_verified
+  ) {
+    return res.status(403).json({
+      error: "Please verify Telegram task before claiming reward",
+      verified: false
     });
   }
 
@@ -929,6 +1083,44 @@ app.get("/", (req, res) => {
 const MASTER_BOT_TOKEN = process.env.MASTER_BOT_TOKEN;
 const MASTER_ADMIN_ID = String(process.env.MASTER_ADMIN_ID || "");
 
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+
+async function verifyTelegramMembership(userId, chatId) {
+  try {
+    const response = await fetch(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getChatMember`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          user_id: Number(userId)
+        })
+      }
+    );
+
+    const data = await response.json();
+
+    if (!data.ok) {
+      console.error("TELEGRAM VERIFY ERROR:", data);
+      return false;
+    }
+
+    const status = data.result?.status;
+
+    return (
+      status === "member" ||
+      status === "administrator" ||
+      status === "creator" ||
+      (status === "restricted" && data.result?.is_member === true)
+    );
+  } catch (error) {
+    console.error("TELEGRAM VERIFY ERROR:", error);
+    return false;
+  }
+}
 let masterBotOffset = 0;
 
 async function masterTelegram(method, body = {}) {
