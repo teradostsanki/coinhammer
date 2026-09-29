@@ -1620,6 +1620,21 @@ async function masterBotLoop() {
             text: "Tasks opened"
           });
         }
+                          if (data === "admin_addtask") {
+          await masterSend(
+            callbackChatId,
+            "➕ Add New Task\n\n" +
+            "Is format me ek message bhejo:\n\n" +
+            "ID | Title | Description | Reward | Category | Icon | Link\n\n" +
+            "Example:\n" +
+            "insta2 | Follow Instagram | Follow our Instagram | 100 | social | 📷 | https://instagram.com/yourpage"
+          );
+
+          await masterTelegram("answerCallbackQuery", {
+            callback_query_id: callback.id,
+            text: "Add Task form opened"
+          });
+                          }
                 }
       }
     }
