@@ -968,7 +968,106 @@ async function handleMasterMessage(message) {
     await masterSend(chatId, "⛔ Unauthorized access.");
     return;
   }
+  if (global.masterTaskAddState?.has(chatId)) {
+    const state = global.masterTaskAddState.get(chatId);
 
+    if (state.step === 1) {
+      state.id = text;
+      state.step = 2;
+      await masterSend(chatId, "📝 Task Title bhejo:");
+      return;
+    }
+
+    if (state.step === 2) {
+      state.title = text;
+      state.step = 3;
+      await masterSend(chatId, "📄 Task Description bhejo:");
+      return;
+    }
+
+    if (state.step === 3) {
+      state.description = text;
+      state.step = 4;
+      await masterSend(chatId, "💰 Maximum Reward bhejo:\n\nExample: 100");
+      return;
+    }
+
+    if (state.step === 4) {
+      const reward = Number(text);
+
+      if (!Number.isInteger(reward) || reward <= 0) {
+        await masterSend(chatId, "❌ Reward valid number hona chahiye.\nExample: 100");
+        return;
+      }
+
+      state.reward = reward;
+      state.step = 5;
+      await masterSend(chatId, "📂 Category bhejo:\n\nExample: social");
+      return;
+    }
+
+    if (state.step === 5) {
+      state.category = text;
+      state.step = 6;
+      await masterSend(chatId, "🎨 Icon/Emoji bhejo:\n\nExample: 📷");
+      return;
+    }
+
+    if (state.step === 6) {
+      state.icon = text;
+      state.step = 7;
+      await masterSend(
+        chatId,
+        "🔗 Task Link bhejo:\n\n" +
+        "Example: https://instagram.com/yourpage\n\n" +
+        "Agar link nahi hai to `skip` bhejo."
+      );
+      return;
+    }
+
+    if (state.step === 7) {
+      state.link = text.toLowerCase() === "skip" ? "" : text;
+
+      try {
+        await pool.query(
+          `INSERT INTO tasks
+           (id, title, description, reward, category, icon, link, active)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)`,
+          [
+            state.id,
+            state.title,
+            state.description,
+            state.reward,
+            state.category,
+            state.icon,
+            state.link
+          ]
+        );
+
+        await masterSend(
+          chatId,
+          "✅ Task Created Successfully!\n\n" +
+          `🆔 ID: ${state.id}\n` +
+          `📌 Title: ${state.title}\n` +
+          `💰 Max Reward: ${state.reward}\n` +
+          `📂 Category: ${state.category}\n` +
+          `🔗 Link: ${state.link || "None"}`
+        );
+
+      } catch (error) {
+        console.error("MASTER ADD TASK ERROR:", error);
+
+        await masterSend(
+          chatId,
+          "❌ Task create nahi hua.\n\n" +
+          "Possible reason: Task ID already exists."
+        );
+      }
+
+      global.masterTaskAddState.delete(chatId);
+      return;
+    }
+  }
   if (text === "/start") {
   await masterSend(
     chatId,
@@ -1621,6 +1720,13 @@ async function masterBotLoop() {
           });
         }
                           if (data === "admin_addtask") {
+              if (!global.masterTaskAddState) {
+            global.masterTaskAddState = new Map();
+          }
+
+          global.masterTaskAddState.set(callbackChatId, {
+            step: 1
+          });                      
           await masterSend(
             callbackChatId,
             "➕ Add New Task\n\n" +
