@@ -414,58 +414,15 @@ async function renderTasks(){
         <div class="task-title">${t.title}</div>
         <div class="task-reward">+${t.reward} COIN</div>
       </div>
-      <button class="task-btn ${done?'done':''}" type="button" ${done?'disabled':''} onclick="startTask('${t.id}', '${t.link||""}')">${done?'✓ Done':'Start'}</button>
+      <button class="task-btn ${done?'done':''}" type="button" ${done?'disabled':''} onclick="completeTask('${t.id}')">${done?'✓ Done':'Start'}</button>
     </div>
   `;
   }).join("");
 }
 
-function startTask(taskId, link){
-  if(link){
-    window.open(link, "_blank");
-  }
-
-  const isTelegram =
-    String(link || "").toLowerCase().includes("t.me/") ||
-    String(link || "").toLowerCase().includes("telegram.me/");
-
-  if(isTelegram){
-    const buttons = document.querySelectorAll(".task-btn");
-
-    buttons.forEach(btn=>{
-      if(btn.getAttribute("onclick")?.includes(taskId)){
-        btn.textContent="Verify";
-        btn.onclick=()=>verifyTask(taskId);
-      }
-    });
-
-    return;
-  }
-
-  setTimeout(()=>{
-    completeTask(taskId);
-  },1000);
-}
-
-async function verifyTask(taskId){
-  try{
-    const j=await post("/api/tasks/verify",{id,taskId});
-
-    if(!j.verified){
-      throw new Error(j.error||"Telegram verification failed");
-    }
-
-    await completeTask(taskId);
-
-  }catch(e){
-    $("notice").textContent="❌ "+e.message;
-    setTimeout(()=>$("notice").textContent="",3000);
-  }
-}
-
 /* ---------- SPIN ---------- */
-const SPIN_AMOUNTS=[20,50,100,150,200,500,1000];
-const SPIN_COLORS=['#FF7A7A','#5CC8FF','#FFD666','#C08CFF','#5CE38C','#FF9F45','#F5A623'];
+const SPIN_AMOUNTS=[0,20,50,100,150,200,500,1000];
+const SPIN_COLORS=['#A7A7A7','#FF7A7A','#5CC8FF','#FFD666','#C08CFF','#5CE38C','#FF9F45','#F5A623'];
 
 function wheelBackground(){
   const seg=360/SPIN_AMOUNTS.length;
@@ -475,7 +432,8 @@ function wheelLabels(){
   const seg=360/SPIN_AMOUNTS.length;
   return SPIN_AMOUNTS.map((amt,i)=>{
     const mid=i*seg+seg/2;
-    return `<div class="wheel-label" style="transform:rotate(${mid}deg) translate(0,-96px) rotate(${90-mid}deg)">${amt}</div>`;
+    const label=amt===0?"😔 0":amt;
+    return `<div class="wheel-label" style="transform:rotate(${mid}deg) translate(0,-96px) rotate(${90-mid}deg)">${label}</div>`;
   }).join("");
 }
 
@@ -485,7 +443,8 @@ async function goSpin(){
 
   $("output").innerHTML=`
     <h2 style="text-align:center;">🎰 Spin & Earn</h2>
-    <div class="muted" style="text-align:center;">One free spin every day!</div>
+    <div class="muted" style="text-align:center;">🎁 1 free spin daily • 📺 +1 spin per ad • Max 5 ad spins/day</div>
+    <div class="card" style="margin-top:10px;text-align:center;">Available Spins: <b id="spinCount">0</b></div>
     <div class="wheel-wrap">
       <div class="wheel-pointer"></div>
       <div class="wheel" id="wheelEl" style="background:${wheelBackground()}">${wheelLabels()}</div>
@@ -499,9 +458,10 @@ async function goSpin(){
   try{
     const r=await fetch(api+"/api/spin/status/"+encodeURIComponent(id));
     const j=await r.json();
+    $("spinCount").textContent=j.availableSpins||0;
     if(!j.canSpin){
       $("spinBtn").disabled=true;
-      $("spinResult").textContent="✅ You already spun today. Come back tomorrow!";
+      $("spinResult").textContent="⏳ No spins available. Watch a rewarded ad to earn another spin.";
     }
   }catch(e){}
 
@@ -526,7 +486,7 @@ async function doSpin(){
     setTimeout(()=>{
       balance=j.balance;
       render();
-      $("spinResult").textContent="🎉 You won "+j.reward+" coins!";
+      $("spinResult").textContent=j.reward===0 ? "😔 Better Luck Next Time!" : "🎉 You won "+j.reward+" coins!";
       loadActivities();
     },4000);
   }catch(e){
@@ -1040,7 +1000,7 @@ async function watchAdAndEarn(){
     balance=j.balance;
     dailyEarnCount=j.dailyEarnCount;
     render();
-    $("timer").textContent="+100 coins";
+    $("timer").textContent="+100 coins • +1 Spin";
     loadActivities();
   }catch(e){
     $("notice").textContent=e.message;
@@ -1051,15 +1011,7 @@ async function watchAdAndEarn(){
   }
 }
 $("earn").onclick=watchAdAndEarn;
-function startTask(taskId, link){
-  if(link){
-    window.open(link, "_blank");
-  }
 
-  setTimeout(()=>{
-    completeTask(taskId);
-  }, 1000);
-}
 async function completeTask(taskId){
   try{
     const j=await post("/api/tasks/complete",{id,taskId});
