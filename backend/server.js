@@ -1160,6 +1160,162 @@ async function handleMasterMessage(message) {
     await masterSend(chatId, "⛔ Unauthorized access.");
     return;
   }
+    if (global.masterTaskEditState?.has(chatId)) {
+    const state = global.masterTaskEditState.get(chatId);
+
+    if (state.step === 1) {
+      state.title = text;
+      state.step = 2;
+
+      await masterSend(
+        chatId,
+        "📄 New Task Description bhejo:"
+      );
+      return;
+    }
+
+    if (state.step === 2) {
+      state.description = text;
+      state.step = 3;
+
+      await masterSend(
+        chatId,
+        "💰 New Maximum Reward bhejo:\n\nExample: 150"
+      );
+      return;
+    }
+
+    if (state.step === 3) {
+      const reward = Number(text);
+
+      if (!Number.isInteger(reward) || reward <= 0) {
+        await masterSend(
+          chatId,
+          "❌ Maximum Reward valid positive number hona chahiye.\nExample: 150"
+        );
+        return;
+      }
+
+      state.reward = reward;
+      state.step = 4;
+
+      await masterSend(
+        chatId,
+        "📂 New Category bhejo:\n\nExample: social / telegram / apps"
+      );
+      return;
+    }
+
+    if (state.step === 4) {
+      state.category = text;
+      state.step = 5;
+
+      await masterSend(
+        chatId,
+        "🎨 New Icon/Emoji bhejo:\n\nExample: 📷"
+      );
+      return;
+    }
+
+    if (state.step === 5) {
+      state.icon = text;
+      state.step = 6;
+
+      await masterSend(
+        chatId,
+        "🔗 New Task Link bhejo:\n\n" +
+        "Example: https://t.me/YourChannel\n\n" +
+        "Link remove karna ho to `skip` bhejo."
+      );
+      return;
+    }
+
+    if (state.step === 6) {
+      state.link =
+        text.toLowerCase() === "skip" ? "" : text;
+
+      state.step = 7;
+
+      await masterSend(
+        chatId,
+        "⚡ Task Active rakhna hai?\n\n" +
+        "Sirf `true` ya `false` bhejo."
+      );
+      return;
+    }
+
+    if (state.step === 7) {
+      const activeText = text.toLowerCase();
+
+      if (activeText !== "true" && activeText !== "false") {
+        await masterSend(
+          chatId,
+          "❌ Sirf `true` ya `false` bhejo."
+        );
+        return;
+      }
+
+      state.active = activeText === "true";
+
+      try {
+        const result = await pool.query(
+          `UPDATE tasks
+           SET title = $1,
+               description = $2,
+               reward = $3,
+               category = $4,
+               icon = $5,
+               link = $6,
+               active = $7
+           WHERE id = $8
+           RETURNING id, title, description, reward,
+                     category, icon, link, active`,
+          [
+            state.title,
+            state.description,
+            state.reward,
+            state.category,
+            state.icon,
+            state.link,
+            state.active,
+            state.taskId
+          ]
+        );
+
+        if (!result.rows.length) {
+          await masterSend(
+            chatId,
+            "❌ Task nahi mila."
+          );
+        } else {
+          const t = result.rows[0];
+
+          await masterSend(
+            chatId,
+            "✅ Task Updated Successfully!\n\n" +
+            `🆔 ID: ${t.id}\n` +
+            `📌 Title: ${t.title}\n` +
+            `📄 Description: ${t.description}\n` +
+            `💰 Max Reward: ${t.reward}\n` +
+            `📂 Category: ${t.category}\n` +
+            `🎨 Icon: ${t.icon}\n` +
+            `🔗 Link: ${t.link || "None"}\n` +
+            `⚡ Active: ${t.active ? "Yes" : "No"}`
+          );
+        }
+      } catch (error) {
+        console.error("MASTER EDIT TASK ERROR:", error);
+
+        await masterSend(
+          chatId,
+          "❌ Task update nahi hua."
+        );
+      }
+
+      global.masterTaskEditState.delete(chatId);
+      return;
+    }
+  }
   if (global.masterTaskAddState?.has(chatId)) {
     const state = global.masterTaskAddState.get(chatId);
 
@@ -1978,45 +2134,66 @@ async function masterBotLoop() {
               text: "Delete Task opened"
             });
           }
+if (data.startsWith("admin_edit_task_")) {
+  const taskId = data.replace("admin_edit_task_", "");
 
-          if (data.startsWith("admin_edit_task_")) {
-            const taskId = data.replace("admin_edit_task_", "");
+  try {
+    const result = await pool.query(
+      `SELECT id, title, description, reward, category, icon, link, active
+       FROM tasks
+       WHERE id = $1`,
+      [taskId]
+    );
 
-            const result = await pool.query(
-              `SELECT id, title, description, reward, category, icon, link, active
-               FROM tasks
-               WHERE id = $1`,
-              [taskId]
-            );
+    if (!result.rows.length) {
+      await masterSend(
+        callbackChatId,
+        "❌ Task nahi mila."
+      );
+      return;
+    }
 
-            if (!result.rows.length) {
-              await masterSend(
-                callbackChatId,
-                "❌ Task not found."
-              );
-            } else {
-              const t = result.rows[0];
+    const task = result.rows[0];
 
-              await masterSend(
-                callbackChatId,
-                "✏️ Edit Task\n\n" +
-                `🆔 ID: ${t.id}\n` +
-                `📌 Title: ${t.title}\n` +
-                `💰 Max Reward: ${t.reward}\n` +
-                `📂 Category: ${t.category}\n` +
-                `🎨 Icon: ${t.icon || "🎯"}\n` +
-                `🔗 Link: ${t.link || "None"}\n` +
-                `⚡ Active: ${t.active}\n\n` +
-                "Current edit command format:\n\n" +
-                `/edittask ${t.id} | Title | Description | MaxReward | Category | Icon | Link | true/false`
-              );
-            }
+    if (!global.masterTaskEditState) {
+      global.masterTaskEditState = new Map();
+    }
 
-            await masterTelegram("answerCallbackQuery", {
-              callback_query_id: callback.id,
-              text: "Task details opened"
-            });
-          }
+    global.masterTaskEditState.set(callbackChatId, {
+      taskId: task.id,
+      title: task.title || "",
+      description: task.description || "",
+      reward: task.reward || 100,
+      category: task.category || "social",
+      icon: task.icon || "🎯",
+      link: task.link || "",
+      active: task.active !== false,
+      step: 1
+    });
+
+    await masterSend(
+      callbackChatId,
+      `✏️ Editing Task: ${task.title}\n\n` +
+      `🆔 ID: ${task.id}\n\n` +
+      `📝 New Task Title bhejo:`
+    );
+
+    await masterTelegram("answerCallbackQuery", {
+      callback_query_id: callback.id,
+      text: "Edit mode started"
+    });
+
+  } catch (error) {
+    console.error("MASTER EDIT START ERROR:", error);
+
+    await masterSend(
+      callbackChatId,
+      "❌ Task edit start nahi hua."
+    );
+  }
+
+  return;
+}
 
           if (data.startsWith("admin_delete_task_")) {
             const taskId = data.replace("admin_delete_task_", "");
