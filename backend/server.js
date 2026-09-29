@@ -1873,6 +1873,239 @@ async function masterBotLoop() {
               text: "Withdrawal rejected"
             });
           }
+              if (data === "admin_stats") {
+            await handleMasterMessage({
+              chat: { id: callbackChatId },
+              text: "/stats"
+            });
+
+            await masterTelegram("answerCallbackQuery", {
+              callback_query_id: callback.id,
+              text: "Statistics opened"
+            });
+          }
+
+          if (data === "admin_users") {
+            await handleMasterMessage({
+              chat: { id: callbackChatId },
+              text: "/users"
+            });
+
+            await masterTelegram("answerCallbackQuery", {
+              callback_query_id: callback.id,
+              text: "Users opened"
+            });
+          }
+
+          if (data === "admin_withdrawals") {
+            await handleMasterMessage({
+              chat: { id: callbackChatId },
+              text: "/withdrawals"
+            });
+
+            await masterTelegram("answerCallbackQuery", {
+              callback_query_id: callback.id,
+              text: "Withdrawals opened"
+            });
+          }
+
+          if (data === "admin_edittask") {
+            const result = await pool.query(`
+              SELECT id, title, reward, category, active
+              FROM tasks
+              ORDER BY created_at DESC
+            `);
+
+            if (!result.rows.length) {
+              await masterSend(
+                callbackChatId,
+                "✏️ No tasks available to edit."
+              );
+            } else {
+              const buttons = result.rows.map(t => [
+                {
+                  text: `✏️ ${t.title}`,
+                  callback_data: `admin_edit_task_${t.id}`
+                }
+              ]);
+
+              await masterSend(
+                callbackChatId,
+                "✏️ Select a task to edit:",
+                {
+                  inline_keyboard: buttons
+                }
+              );
+            }
+
+            await masterTelegram("answerCallbackQuery", {
+              callback_query_id: callback.id,
+              text: "Edit Task opened"
+            });
+          }
+
+          if (data === "admin_deletetask") {
+            const result = await pool.query(`
+              SELECT id, title
+              FROM tasks
+              ORDER BY created_at DESC
+            `);
+
+            if (!result.rows.length) {
+              await masterSend(
+                callbackChatId,
+                "🗑️ No tasks available to delete."
+              );
+            } else {
+              const buttons = result.rows.map(t => [
+                {
+                  text: `🗑️ ${t.title}`,
+                  callback_data: `admin_delete_task_${t.id}`
+                }
+              ]);
+
+              await masterSend(
+                callbackChatId,
+                "🗑️ Select a task to delete:",
+                {
+                  inline_keyboard: buttons
+                }
+              );
+            }
+
+            await masterTelegram("answerCallbackQuery", {
+              callback_query_id: callback.id,
+              text: "Delete Task opened"
+            });
+          }
+
+          if (data.startsWith("admin_edit_task_")) {
+            const taskId = data.replace("admin_edit_task_", "");
+
+            const result = await pool.query(
+              `SELECT id, title, description, reward, category, icon, link, active
+               FROM tasks
+               WHERE id = $1`,
+              [taskId]
+            );
+
+            if (!result.rows.length) {
+              await masterSend(
+                callbackChatId,
+                "❌ Task not found."
+              );
+            } else {
+              const t = result.rows[0];
+
+              await masterSend(
+                callbackChatId,
+                "✏️ Edit Task\n\n" +
+                `🆔 ID: ${t.id}\n` +
+                `📌 Title: ${t.title}\n` +
+                `💰 Max Reward: ${t.reward}\n` +
+                `📂 Category: ${t.category}\n` +
+                `🎨 Icon: ${t.icon || "🎯"}\n` +
+                `🔗 Link: ${t.link || "None"}\n` +
+                `⚡ Active: ${t.active}\n\n` +
+                "Current edit command format:\n\n" +
+                `/edittask ${t.id} | Title | Description | MaxReward | Category | Icon | Link | true/false`
+              );
+            }
+
+            await masterTelegram("answerCallbackQuery", {
+              callback_query_id: callback.id,
+              text: "Task details opened"
+            });
+          }
+
+          if (data.startsWith("admin_delete_task_")) {
+            const taskId = data.replace("admin_delete_task_", "");
+
+            const result = await pool.query(
+              `SELECT id, title
+               FROM tasks
+               WHERE id = $1`,
+              [taskId]
+            );
+
+            if (!result.rows.length) {
+              await masterSend(
+                callbackChatId,
+                "❌ Task not found."
+              );
+            } else {
+              const t = result.rows[0];
+
+              await masterSend(
+                callbackChatId,
+                `⚠️ Delete "${t.title}"?\n\n` +
+                "This action cannot be undone.",
+                {
+                  inline_keyboard: [
+                    [
+                      {
+                        text: "✅ Confirm Delete",
+                        callback_data: `admin_confirm_delete_${t.id}`
+                      }
+                    ],
+                    [
+                      {
+                        text: "❌ Cancel",
+                        callback_data: "admin_cancel_delete"
+                      }
+                    ]
+                  ]
+                }
+              );
+            }
+
+            await masterTelegram("answerCallbackQuery", {
+              callback_query_id: callback.id,
+              text: "Delete confirmation opened"
+            });
+          }
+
+          if (data.startsWith("admin_confirm_delete_")) {
+            const taskId = data.replace("admin_confirm_delete_", "");
+
+            const result = await pool.query(
+              `DELETE FROM tasks
+               WHERE id = $1
+               RETURNING id, title`,
+              [taskId]
+            );
+
+            if (!result.rows.length) {
+              await masterSend(
+                callbackChatId,
+                "❌ Task not found or already deleted."
+              );
+            } else {
+              await masterSend(
+                callbackChatId,
+                `✅ Task deleted successfully!\n\n` +
+                `🆔 ID: ${result.rows[0].id}\n` +
+                `📌 ${result.rows[0].title}`
+              );
+            }
+
+            await masterTelegram("answerCallbackQuery", {
+              callback_query_id: callback.id,
+              text: "Task deleted"
+            });
+          }
+
+          if (data === "admin_cancel_delete") {
+            await masterSend(
+              callbackChatId,
+              "❌ Delete cancelled."
+            );
+
+            await masterTelegram("answerCallbackQuery", {
+              callback_query_id: callback.id,
+              text: "Cancelled"
+            });
+          }
                           if (data === "admin_tasks") {
           const result = await pool.query(
             `SELECT id, title, reward, category, active
