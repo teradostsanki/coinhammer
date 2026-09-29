@@ -41,6 +41,26 @@ await pool.query(`
   ALTER TABLE users
   ADD COLUMN IF NOT EXISTS last_spin_date DATE
 `);
+await pool.query(`
+  ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS spin_credits INTEGER DEFAULT 0
+`);
+await pool.query(`
+  ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS spin_credit_date DATE
+`);
+await pool.query(`
+  ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS ad_spin_count INTEGER DEFAULT 0
+`);
+await pool.query(`
+  ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS ad_spin_date DATE
+`);
+  await pool.query(`
+  ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS last_ad_reward_at TIMESTAMP
+`);
   await pool.query(`
   CREATE TABLE IF NOT EXISTS user_tasks (
     id SERIAL PRIMARY KEY,
@@ -112,13 +132,16 @@ await pool.query(`
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
+  await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS task_id TEXT`);
+  await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS withdrawal_id INTEGER`);
+  await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS referral_id INTEGER`);
 };
 const app = express();
 initDb().catch(err => console.error("Database init error:", err));
 app.use(cors());
 app.use(express.json());
 
-async function getUser(id, username="DemoUser") {
+async function getUser(id, username="Telegram User") {
   const result = await pool.query(
     "SELECT * FROM users WHERE id = $1",
     [id]
@@ -139,8 +162,26 @@ app.get("/health", (req,res) => {
   res.send("OK");
 });
 app.get("/api/user/:id", async (req,res) => {
-  const u = await getUser(String(req.params.id));
-  res.json(u);
+  try {
+    const id = String(req.params.id || "").trim();
+    const username = String(req.query.username || "").trim().slice(0,100);
+    if (!id) return res.status(400).json({ error: "Missing user id" });
+
+    const u = await getUser(id, username || "Telegram User");
+
+    if (username && u.username !== username) {
+      const updated = await pool.query(
+        `UPDATE users SET username = $1 WHERE id = $2 RETURNING *`,
+        [username, id]
+      );
+      return res.json(updated.rows[0]);
+    }
+
+    res.json(u);
+  } catch (e) {
+    console.error("USER LOAD ERROR:", e);
+    res.status(500).json({ error: "Failed to load user" });
+  }
 });
 
 app.post("/api/earn", async (req,res) => {
@@ -149,6 +190,17 @@ app.post("/api/earn", async (req,res) => {
     if (!id) return res.status(400).json({error:"Missing user id"});
 
     await getUser(id);
+
+    const cooldown = await pool.query(
+      `SELECT last_ad_reward_at FROM users WHERE id = $1`,
+      [id]
+    );
+    const lastAd = cooldown.rows[0]?.last_ad_reward_at
+      ? new Date(cooldown.rows[0].last_ad_reward_at).getTime()
+      : 0;
+    if (lastAd && Date.now() - lastAd < 20000) {
+      return res.status(429).json({ error: "Please wait before claiming another ad reward." });
+    }
 
     const updated = await pool.query(
       `UPDATE users
@@ -159,7 +211,21 @@ app.post("/api/earn", async (req,res) => {
                ELSE daily_earn_count + 1
              END,
            daily_earn_date = CURRENT_DATE,
-           balance = balance + 100
+           balance = balance + 100,
+           spin_credits =
+             CASE
+               WHEN spin_credit_date IS NULL OR spin_credit_date < CURRENT_DATE
+               THEN 2
+               ELSE COALESCE(spin_credits, 0) + 1
+             END,
+           spin_credit_date = CURRENT_DATE,
+           ad_spin_count =
+             CASE
+               WHEN ad_spin_date IS NULL OR ad_spin_date < CURRENT_DATE
+               THEN 1
+               ELSE COALESCE(ad_spin_count, 0) + 1
+             END,
+           ad_spin_date = CURRENT_DATE
        WHERE id = $1
          AND (
            daily_earn_date IS NULL
@@ -311,11 +377,16 @@ app.get("/api/activities/:id", async (req,res) => {
    LEFT JOIN LATERAL (
   SELECT created_at, processed_at
   FROM withdrawals
-  WHERE user_id = a.user_id
-    AND a.type = 'withdrawal'
-    AND a.description LIKE 'Withdrawal ₹' || amount::text || '%'
-    AND created_at <= a.created_at
-  ORDER BY created_at DESC
+  WHERE id = a.withdrawal_id
+     OR (
+       a.withdrawal_id IS NULL
+       AND user_id = a.user_id
+       AND a.type = 'withdrawal'
+       AND a.description LIKE 'Withdrawal ₹' || amount::text || '%'
+       AND created_at <= a.created_at
+     )
+  ORDER BY CASE WHEN id = a.withdrawal_id THEN 0 ELSE 1 END,
+           created_at DESC
   LIMIT 1
 ) w ON TRUE
    WHERE a.user_id = $1
@@ -386,6 +457,13 @@ app.post("/api/referral/claim", async (req,res) => {
          SET reward_given = TRUE
          WHERE id = $1`,
         [referral.rows[0].id]
+      );
+
+      await client.query(
+        `INSERT INTO activities
+         (user_id, type, amount, description, status, referral_id)
+         VALUES ($1, 'referral', 500, 'Referral reward', 'completed', $2)`,
+        [referral.rows[0].referrer_id, referral.rows[0].id]
       );
 
       rewardGiven = true;
@@ -647,10 +725,17 @@ app.post("/api/tasks/complete", async (req,res) => {
       if (existingTask.rows[0]?.reward_given === false) {
         const recoveredUser = await client.query(
           `UPDATE users
-           SET balance = balance + randomReward
+           SET balance = balance + $2
            WHERE id = $1
            RETURNING *`,
-          [id]
+          [id, randomReward]
+        );
+
+        await client.query(
+          `INSERT INTO activities
+           (user_id, type, amount, description, status, task_id)
+           VALUES ($1, 'task', $2, $3, 'completed', $4)`,
+          [id, randomReward, `Task reward: ${taskId}`, taskId]
         );
 
         await client.query(
@@ -682,10 +767,17 @@ app.post("/api/tasks/complete", async (req,res) => {
     const updatedUser = await client.query(
       `UPDATE users
        SET tasks_completed = tasks_completed + 1,
-           balance = balance + randomReward
+           balance = balance + $2
        WHERE id = $1
        RETURNING *`,
       [id, randomReward]
+    );
+
+    await client.query(
+      `INSERT INTO activities
+       (user_id, type, amount, description, status, task_id)
+       VALUES ($1, 'task', $2, $3, 'completed', $4)`,
+      [id, randomReward, `Task reward: ${taskId}`, taskId]
     );
 
     const user = updatedUser.rows[0];
@@ -765,6 +857,7 @@ app.post("/api/withdraw", async (req,res) => {
     const id = String(req.body.id || "");
     const method = String(req.body.method || "").toLowerCase();
     const amount = Number(req.body.amount);
+    const amountCoins = Math.round(amount * 100);
 
     const accountHolderName = String(req.body.accountHolderName || "");
     const accountNumber = String(req.body.accountNumber || "");
@@ -777,7 +870,7 @@ app.post("/api/withdraw", async (req,res) => {
       });
     }
 
-    if (!Number.isFinite(amount) || amount < 10) {
+    if (!Number.isFinite(amount) || amount < 10 || amountCoins < 1000) {
       return res.status(400).json({
         error: "Minimum withdrawal is ₹10"
       });
@@ -815,7 +908,7 @@ app.post("/api/withdraw", async (req,res) => {
 
     const user = userResult.rows[0];
 
-    if (amount * 100 > user.balance) {
+    if (amountCoins > user.balance) {
       await client.query("ROLLBACK");
       return res.status(400).json({
         error: "Insufficient balance"
@@ -840,9 +933,9 @@ app.post("/api/withdraw", async (req,res) => {
 
     await client.query(
       `UPDATE users
-       SET balance = balance - ($1 * 100)
+       SET balance = balance - $1
        WHERE id = $2`,
-      [amount, id]
+      [amountCoins, id]
     );
 
     const withdrawal = await client.query(
@@ -871,12 +964,13 @@ app.post("/api/withdraw", async (req,res) => {
     );
 await client.query(`
   INSERT INTO activities
-  (user_id, type, amount, description, status)
-  VALUES ($1, 'withdrawal', $2, $3, 'pending')
+  (user_id, type, amount, description, status, withdrawal_id)
+  VALUES ($1, 'withdrawal', $2, $3, 'pending', $4)
 `, [
   id,
-  Math.round(amount * 100),
-  `Withdrawal ₹${amount.toFixed(2)} requested`
+  amountCoins,
+  `Withdrawal ₹${amount.toFixed(2)} requested`,
+  withdrawal.rows[0].id
 ]);
     await client.query("COMMIT");
   await masterSend(
@@ -905,7 +999,7 @@ await client.query(`
       status: "pending",
       message: "Withdrawal request submitted successfully",
       withdrawalId: withdrawal.rows[0].id,
-      balance: user.balance - (amount * 100)
+      balance: user.balance - amountCoins
     });
 
   } catch (e) {
@@ -956,88 +1050,164 @@ app.get("/api/leaderboard", async (req,res) => {
   res.json(result.rows);
 });
 
-// Prizes on the spin wheel (weight = relative chance; higher weight = more common)
+// Spin system:
+// • 1 free spin is granted automatically each day.
+// • Every completed rewarded ad grants 1 additional spin.
+// • Maximum 5 rewarded-ad spins per day (the existing ad limit).
+// • Spins do not carry over to the next day.
+// • 1000 coins has exactly 1% probability.
 const SPIN_PRIZES = [
-  { amount: 20,  weight: 30 },
-  { amount: 50,  weight: 25 },
-  { amount: 100, weight: 20 },
-  { amount: 150, weight: 12 },
-  { amount: 200, weight: 7 },
-  { amount: 500, weight: 4 },
-  { amount: 1000, weight: 2 }
+  { amount: 0,    label: "Better Luck Next Time", weight: 20 },
+  { amount: 20,   label: "20 Coins", weight: 30 },
+  { amount: 50,   label: "50 Coins", weight: 20 },
+  { amount: 100,  label: "100 Coins", weight: 12 },
+  { amount: 150,  label: "150 Coins", weight: 8 },
+  { amount: 200,  label: "200 Coins", weight: 5 },
+  { amount: 500,  label: "500 Coins", weight: 4 },
+  { amount: 1000, label: "1000 Coins", weight: 1 }
 ];
 
 function pickSpinPrize() {
   const totalWeight = SPIN_PRIZES.reduce((s, p) => s + p.weight, 0);
   let r = Math.random() * totalWeight;
   for (const p of SPIN_PRIZES) {
-    if (r < p.weight) return p.amount;
+    if (r < p.weight) return p;
     r -= p.weight;
   }
-  return SPIN_PRIZES[0].amount;
+  return SPIN_PRIZES[0];
+}
+
+async function ensureDailySpinCredits(id) {
+  const result = await pool.query(
+    `UPDATE users
+     SET spin_credits = CASE
+           WHEN spin_credit_date IS NULL OR spin_credit_date < CURRENT_DATE THEN 1
+           ELSE COALESCE(spin_credits, 0)
+         END,
+         spin_credit_date = CURRENT_DATE,
+         ad_spin_count = CASE
+           WHEN ad_spin_date IS NULL OR ad_spin_date < CURRENT_DATE THEN 0
+           ELSE COALESCE(ad_spin_count, 0)
+         END,
+         ad_spin_date = CURRENT_DATE
+     WHERE id = $1
+     RETURNING spin_credits, ad_spin_count`,
+    [id]
+  );
+  return result.rows[0];
 }
 
 app.get("/api/spin/status/:id", async (req, res) => {
-  const id = String(req.params.id);
-  await getUser(id);
-  const u = await pool.query("SELECT last_spin_date FROM users WHERE id = $1", [id]);
-  const today = new Date().toISOString().slice(0, 10);
-  const lastSpin = u.rows[0]?.last_spin_date
-    ? new Date(u.rows[0].last_spin_date).toISOString().slice(0, 10)
-    : null;
-  res.json({ canSpin: lastSpin !== today });
+  try {
+    const id = String(req.params.id || "");
+    if (!id) return res.status(400).json({ error: "Missing user id" });
+
+    await getUser(id);
+    const u = await ensureDailySpinCredits(id);
+
+    res.json({
+      canSpin: Number(u.spin_credits || 0) > 0,
+      availableSpins: Number(u.spin_credits || 0),
+      freeSpinAvailable: Number(u.spin_credits || 0) > 0,
+      adSpinsToday: Number(u.ad_spin_count || 0),
+      adSpinsRemaining: Math.max(0, 5 - Number(u.ad_spin_count || 0))
+    });
+  } catch (e) {
+    console.error("SPIN STATUS ERROR:", e);
+    res.status(500).json({ error: "Failed to load spin status" });
+  }
 });
 
 app.post("/api/spin", async (req, res) => {
   const client = await pool.connect();
   try {
     const id = String(req.body.id || "");
-    if (!id) { client.release(); return res.status(400).json({ error: "Missing user id" }); }
-
-    await getUser(id);
-    const today = new Date().toISOString().slice(0, 10);
+    if (!id) {
+      client.release();
+      return res.status(400).json({ error: "Missing user id" });
+    }
 
     await client.query("BEGIN");
 
     const userRow = await client.query(
-      "SELECT last_spin_date FROM users WHERE id = $1 FOR UPDATE",
+      `SELECT spin_credits, spin_credit_date, ad_spin_count, ad_spin_date
+       FROM users
+       WHERE id = $1
+       FOR UPDATE`,
       [id]
     );
 
-    const lastSpin = userRow.rows[0]?.last_spin_date
-      ? new Date(userRow.rows[0].last_spin_date).toISOString().slice(0, 10)
-      : null;
-
-    if (lastSpin === today) {
+    if (!userRow.rows.length) {
       await client.query("ROLLBACK");
-      client.release();
-      return res.status(409).json({ error: "You already spun today. Come back tomorrow!" });
+      return res.status(404).json({ error: "User not found" });
     }
 
-    const reward = pickSpinPrize();
+    const user = userRow.rows[0];
+    const today = new Date().toISOString().slice(0, 10);
+    const creditDate = user.spin_credit_date
+      ? new Date(user.spin_credit_date).toISOString().slice(0, 10)
+      : null;
+
+    let availableSpins = Number(user.spin_credits || 0);
+
+    // Give exactly 1 fresh free spin on a new day.
+    if (creditDate !== today) {
+      availableSpins = 1;
+      await client.query(
+        `UPDATE users
+         SET spin_credits = 1,
+             spin_credit_date = $1,
+             ad_spin_count = 0,
+             ad_spin_date = $1
+         WHERE id = $2`,
+        [today, id]
+      );
+    }
+
+    if (availableSpins <= 0) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        error: "No spins available. Watch a rewarded ad to earn another spin."
+      });
+    }
+
+    const prize = pickSpinPrize();
 
     const updated = await client.query(
       `UPDATE users
-       SET last_spin_date = $1,
+       SET spin_credits = spin_credits - 1,
+           last_spin_date = $1,
            balance = balance + $2
        WHERE id = $3
        RETURNING *`,
-      [today, reward, id]
+      [today, prize.amount, id]
     );
 
     await client.query(
       `INSERT INTO activities
        (user_id, type, amount, description, status)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [id, "spin", reward, "Spin & Earn reward", "completed"]
+       VALUES ($1, 'spin', $2, $3, 'completed')`,
+      [
+        id,
+        prize.amount,
+        prize.amount > 0 ? `Spin & Earn — ${prize.label}` : `Spin & Earn — ${prize.label}`
+      ]
     );
 
     await client.query("COMMIT");
 
-    res.json({ ok: true, reward, balance: updated.rows[0].balance });
+    res.json({
+      ok: true,
+      reward: prize.amount,
+      label: prize.label,
+      balance: updated.rows[0].balance,
+      availableSpins: Math.max(0, Number(updated.rows[0].spin_credits || 0)),
+      adSpinsToday: Number(updated.rows[0].ad_spin_count || 0)
+    });
   } catch (e) {
     await client.query("ROLLBACK");
-    res.status(500).json({ error: e.message });
+    console.error("SPIN ERROR:", e);
+    res.status(500).json({ error: "Spin failed" });
   } finally {
     client.release();
   }
@@ -1160,7 +1330,14 @@ async function handleMasterMessage(message) {
     await masterSend(chatId, "⛔ Unauthorized access.");
     return;
   }
-    if (global.masterTaskEditState?.has(chatId)) {
+    if (text === "/cancel") {
+    global.masterTaskEditState?.delete(chatId);
+    global.masterTaskAddState?.delete(chatId);
+    await masterSend(chatId, "❎ Current admin operation cancelled.");
+    return;
+  }
+
+  if (global.masterTaskEditState?.has(chatId)) {
     const state = global.masterTaskEditState.get(chatId);
 
     if (state.step === 1) {
@@ -1417,6 +1594,8 @@ async function handleMasterMessage(message) {
     }
   }
   if (text === "/start") {
+  global.masterTaskEditState?.delete(chatId);
+  global.masterTaskAddState?.delete(chatId);
   await masterSend(
     chatId,
     "🔐 CoinHammer Master Admin Bot\n\n" +
@@ -1852,23 +2031,25 @@ if (text === "/withdrawals") {
 
         await pool.query(`
   UPDATE activities
-  SET amount = -$3,
-      description = $1,
+  SET amount = -$1,
+      description = $2,
       status = 'approved'
   WHERE id = (
     SELECT id
     FROM activities
-    WHERE user_id = $2
+    WHERE user_id = $3
       AND type = 'withdrawal'
       AND status = 'pending'
-      AND amount = $3
-    ORDER BY created_at DESC
+      AND (withdrawal_id = $4 OR (withdrawal_id IS NULL AND amount = $1))
+    ORDER BY CASE WHEN withdrawal_id = $4 THEN 0 ELSE 1 END,
+             created_at DESC
     LIMIT 1
   )
 `, [
+  Math.round(Number(w.amount) * 100),
   `Withdrawal ₹${w.amount} approved`,
   w.user_id,
-  Math.round(Number(w.amount) * 100)
+  w.id
 ]);
 
         await masterSend(
@@ -1941,13 +2122,16 @@ if (text === "/withdrawals") {
     WHERE user_id = $3
       AND type = 'withdrawal'
       AND status = 'pending'
-    ORDER BY created_at DESC
+      AND (withdrawal_id = $4 OR withdrawal_id IS NULL)
+    ORDER BY CASE WHEN withdrawal_id = $4 THEN 0 ELSE 1 END,
+             created_at DESC
     LIMIT 1
   )
 `, [
   refundCoins,
   `Withdrawal ₹${w.amount} rejected - coins refunded`,
-  w.user_id
+  w.user_id,
+  w.id
 ]);
 
         await client.query("COMMIT");
@@ -2332,10 +2516,8 @@ if (data.startsWith("admin_edit_task_")) {
           await masterSend(
             callbackChatId,
             "➕ Add New Task\n\n" +
-            "Is format me ek message bhejo:\n\n" +
-            "ID | Title | Description | Reward | Category | Icon | Link\n\n" +
-            "Example:\n" +
-            "insta2 | Follow Instagram | Follow our Instagram | 100 | social | 📷 | https://instagram.com/yourpage"
+            "Pehle Task ID bhejo.\n" +
+            "Example: insta2"
           );
 
           await masterTelegram("answerCallbackQuery", {
