@@ -146,7 +146,7 @@ await pool.query(`
   `);
 };
 const app = express();
-initDb().catch(err => console.error("Database init error:", err));
+const dbReady = initDb().catch(err => { console.error("Database init error:", err); throw err; });
 app.use(cors());
 app.use(express.json());
 
@@ -1330,6 +1330,16 @@ async function masterTelegram(method, body = {}) {
   }
 }
 
+async function safeSaveMasterState(chatId, mode, state) {
+  try {
+    await saveMasterState(chatId, mode, state);
+    return true;
+  } catch (error) {
+    console.error("MASTER STATE SAVE ERROR:", error);
+    return false;
+  }
+}
+
 async function saveMasterState(chatId, mode, state) {
   await pool.query(
     `INSERT INTO admin_states (chat_id, mode, state, updated_at)
@@ -1413,7 +1423,7 @@ async function handleMasterMessage(message) {
     if (state.step === 1) {
       state.title = text;
       state.step = 2;
-      await saveMasterState(chatId, "edit", state);
+      await safeSaveMasterState(chatId, "edit", state);
 
       await masterSend(
         chatId,
@@ -1425,7 +1435,7 @@ async function handleMasterMessage(message) {
     if (state.step === 2) {
       state.description = text;
       state.step = 3;
-      await saveMasterState(chatId, "edit", state);
+      await safeSaveMasterState(chatId, "edit", state);
 
       await masterSend(
         chatId,
@@ -1447,7 +1457,7 @@ async function handleMasterMessage(message) {
 
       state.reward = reward;
       state.step = 4;
-      await saveMasterState(chatId, "edit", state);
+      await safeSaveMasterState(chatId, "edit", state);
 
       await masterSend(
         chatId,
@@ -1459,7 +1469,7 @@ async function handleMasterMessage(message) {
     if (state.step === 4) {
       state.category = text;
       state.step = 5;
-      await saveMasterState(chatId, "edit", state);
+      await safeSaveMasterState(chatId, "edit", state);
 
       await masterSend(
         chatId,
@@ -1471,7 +1481,7 @@ async function handleMasterMessage(message) {
     if (state.step === 5) {
       state.icon = text;
       state.step = 6;
-      await saveMasterState(chatId, "edit", state);
+      await safeSaveMasterState(chatId, "edit", state);
 
       await masterSend(
         chatId,
@@ -1487,7 +1497,7 @@ async function handleMasterMessage(message) {
         text.toLowerCase() === "skip" ? "" : text;
 
       state.step = 7;
-      await saveMasterState(chatId, "edit", state);
+      await safeSaveMasterState(chatId, "edit", state);
 
       await masterSend(
         chatId,
@@ -1575,7 +1585,7 @@ async function handleMasterMessage(message) {
     if (state.step === 1) {
       state.id = text;
       state.step = 2;
-      await saveMasterState(chatId, "add", state);
+      await safeSaveMasterState(chatId, "add", state);
       await masterSend(chatId, "📝 Task Title bhejo:");
       return;
     }
@@ -1583,7 +1593,7 @@ async function handleMasterMessage(message) {
     if (state.step === 2) {
       state.title = text;
       state.step = 3;
-      await saveMasterState(chatId, "add", state);
+      await safeSaveMasterState(chatId, "add", state);
       await masterSend(chatId, "📄 Task Description bhejo:");
       return;
     }
@@ -1591,7 +1601,7 @@ async function handleMasterMessage(message) {
     if (state.step === 3) {
       state.description = text;
       state.step = 4;
-      await saveMasterState(chatId, "add", state);
+      await safeSaveMasterState(chatId, "add", state);
       await masterSend(chatId, "💰 Maximum Reward bhejo:\n\nExample: 100");
       return;
     }
@@ -1606,7 +1616,7 @@ async function handleMasterMessage(message) {
 
       state.reward = reward;
       state.step = 5;
-      await saveMasterState(chatId, "add", state);
+      await safeSaveMasterState(chatId, "add", state);
       await masterSend(chatId, "📂 Category bhejo:\n\nExample: social");
       return;
     }
@@ -1614,7 +1624,7 @@ async function handleMasterMessage(message) {
     if (state.step === 5) {
       state.category = text;
       state.step = 6;
-      await saveMasterState(chatId, "add", state);
+      await safeSaveMasterState(chatId, "add", state);
       await masterSend(chatId, "🎨 Icon/Emoji bhejo:\n\nExample: 📷");
       return;
     }
@@ -1622,7 +1632,7 @@ async function handleMasterMessage(message) {
     if (state.step === 6) {
       state.icon = text;
       state.step = 7;
-      await saveMasterState(chatId, "add", state);
+      await safeSaveMasterState(chatId, "add", state);
       await masterSend(
         chatId,
         "🔗 Task Link bhejo:\n\n" +
@@ -2243,6 +2253,14 @@ if (text === "/withdrawals") {
 }
 
 async function masterBotLoop() {
+  try {
+    await dbReady;
+  } catch (error) {
+    console.error("DATABASE NOT READY:", error?.message || error);
+    setTimeout(masterBotLoop, 3000);
+    return;
+  }
+
   if (!MASTER_BOT_TOKEN || !MASTER_ADMIN_ID) {
     console.log("Master Admin Bot variables are missing.");
     return;
@@ -2447,7 +2465,7 @@ if (data.startsWith("admin_edit_task_")) {
     };
 
     global.masterTaskEditState.set(callbackChatId, editState);
-    await saveMasterState(callbackChatId, "edit", editState);
+    await safeSaveMasterState(callbackChatId, "edit", editState);
 
     await masterSend(
       callbackChatId,
