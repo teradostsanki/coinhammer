@@ -420,6 +420,49 @@ async function renderTasks(){
   }).join("");
 }
 
+function startTask(taskId, link){
+  if(link){
+    window.open(link, "_blank");
+  }
+
+  const isTelegram =
+    String(link || "").toLowerCase().includes("t.me/") ||
+    String(link || "").toLowerCase().includes("telegram.me/");
+
+  if(isTelegram){
+    const buttons = document.querySelectorAll(".task-btn");
+
+    buttons.forEach(btn=>{
+      if(btn.getAttribute("onclick")?.includes(taskId)){
+        btn.textContent="Verify";
+        btn.onclick=()=>verifyTask(taskId);
+      }
+    });
+
+    return;
+  }
+
+  setTimeout(()=>{
+    completeTask(taskId);
+  },1000);
+}
+
+async function verifyTask(taskId){
+  try{
+    const j=await post("/api/tasks/verify",{id,taskId});
+
+    if(!j.verified){
+      throw new Error(j.error||"Telegram verification failed");
+    }
+
+    await completeTask(taskId);
+
+  }catch(e){
+    $("notice").textContent="❌ "+e.message;
+    setTimeout(()=>$("notice").textContent="",3000);
+  }
+}
+
 /* ---------- SPIN ---------- */
 const SPIN_AMOUNTS=[20,50,100,150,200,500,1000];
 const SPIN_COLORS=['#FF7A7A','#5CC8FF','#FFD666','#C08CFF','#5CE38C','#FF9F45','#F5A623'];
