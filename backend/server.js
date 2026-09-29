@@ -1582,6 +1582,44 @@ async function masterBotLoop() {
               text: "Withdrawal rejected"
             });
           }
+                          if (data === "admin_tasks") {
+          const result = await pool.query(
+            `SELECT id, title, reward, category, active
+             FROM tasks
+             ORDER BY created_at DESC`
+          );
+
+          if (result.rows.length === 0) {
+            await masterSend(
+              callbackChatId,
+              "📋 No tasks found."
+            );
+          } else {
+            const buttons = result.rows.map(t => [
+              {
+                text: `${t.active ? "🟢" : "🔴"} ${t.title} (${t.reward})`,
+                callback_data: `admin_task_${t.id}`
+              }
+            ]);
+
+            buttons.push([
+              { text: "➕ Add Task", callback_data: "admin_addtask" }
+            ]);
+
+            await masterSend(
+              callbackChatId,
+              "📋 CoinHammer Tasks\n\nSelect a task:",
+              {
+                inline_keyboard: buttons
+              }
+            );
+          }
+
+          await masterTelegram("answerCallbackQuery", {
+            callback_query_id: callback.id,
+            text: "Tasks opened"
+          });
+        }
                 }
       }
     }
