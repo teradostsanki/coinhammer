@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import path from "path";
+import crypto from "crypto";
 import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -144,11 +145,119 @@ await pool.query(`
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_activities_user ON activities(user_id, created_at DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_id)`);
 };
 const app = express();
 const dbReady = initDb().catch(err => { console.error("Database init error:", err); throw err; });
+app.set("trust proxy", 1);
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "50kb" }));
+
+// Every async route is wrapped: a thrown error becomes a clean 500, never a crash/hang.
+for (const method of ["get", "post"]) {
+  const original = app[method].bind(app);
+  app[method] = (routePath, ...handlers) => {
+    if (method === "get" && handlers.length === 0) return original(routePath); // app.get("setting")
+    return original(
+      routePath,
+      ...handlers.map(fn =>
+        typeof fn === "function"
+          ? (req, res, next) =>
+              Promise.resolve(fn(req, res, next)).catch(err => {
+                console.error(`ROUTE ERROR [${method.toUpperCase()} ${req.originalUrl.split("?")[0]}]:`, err);
+                if (!res.headersSent) res.status(500).json({ error: "Internal server error" });
+              })
+          : fn
+      )
+    );
+  };
+}
+
+// ---- Telegram Mini App authentication (initData HMAC) ----
+// Frontend must send header:  x-telegram-init-data: <Telegram.WebApp.initData>
+// REQUIRE_TG_AUTH=true  -> header mandatory. Otherwise header is optional but, if sent, must be valid.
+const REQUIRE_TG_AUTH = String(process.env.REQUIRE_TG_AUTH || "").toLowerCase() === "true";
+const AUTH_EXEMPT = new Set(["/api/admin/stats", "/api/leaderboard", "/api/tasks"]);
+
+function validateInitData(initData, botToken, maxAgeSec = 86400) {
+  try {
+    if (!initData || !botToken) return null;
+    const params = new URLSearchParams(initData);
+    const hash = params.get("hash");
+    if (!hash) return null;
+    params.delete("hash");
+    const dataCheckString = [...params.entries()]
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([k, v]) => `${k}=${v}`)
+      .join("\n");
+    const secret = crypto.createHmac("sha256", "WebAppData").update(botToken).digest();
+    const calc = crypto.createHmac("sha256", secret).update(dataCheckString).digest("hex");
+    const a = Buffer.from(calc, "hex");
+    const b = Buffer.from(hash, "hex");
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+    const authDate = Number(params.get("auth_date"));
+    if (!authDate || Date.now() / 1000 - authDate > maxAgeSec) return null;
+    const user = JSON.parse(params.get("user") || "null");
+    return user && user.id ? user : null;
+  } catch {
+    return null;
+  }
+}
+
+app.use("/api", (req, res, next) => {
+  const p = req.originalUrl.split("?")[0].replace(/\/+$/, "");
+  if (AUTH_EXEMPT.has(p)) return next();
+
+  const initData = req.get("x-telegram-init-data");
+  if (!initData) {
+    if (REQUIRE_TG_AUTH) return res.status(401).json({ error: "Telegram authentication required" });
+    return next();
+  }
+
+  const user = validateInitData(initData, process.env.WEBAPP_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN);
+  if (!user) return res.status(401).json({ error: "Invalid Telegram authentication" });
+
+  const uid = String(user.id);
+  req.tgUserId = uid;
+
+  const last = p.split("/").pop();
+  const claimed = [req.body?.id, req.body?.referredId, /^\d+$/.test(last) ? last : null]
+    .filter(v => v !== undefined && v !== null && v !== "")
+    .map(String);
+  if (claimed.some(c => c !== uid)) {
+    return res.status(403).json({ error: "User mismatch" });
+  }
+  next();
+});
+
+// ---- Simple in-memory rate limiter ----
+const rlStore = new Map();
+function rateLimit({ windowMs, max, keyFn }) {
+  return (req, res, next) => {
+    const key = keyFn(req);
+    const now = Date.now();
+    let e = rlStore.get(key);
+    if (!e || e.reset <= now) { e = { count: 0, reset: now + windowMs }; rlStore.set(key, e); }
+    e.count++;
+    if (e.count > max) {
+      res.set("Retry-After", String(Math.ceil((e.reset - now) / 1000)));
+      return res.status(429).json({ error: "Too many requests. Please slow down." });
+    }
+    next();
+  };
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, e] of rlStore) if (e.reset <= now) rlStore.delete(k);
+}, 60000).unref();
+
+const who = req => req.tgUserId || req.ip;
+app.use("/api", rateLimit({ windowMs: 60000, max: 300, keyFn: req => `g:${who(req)}` }));
+app.use(
+  ["/api/earn", "/api/spin", "/api/daily", "/api/withdraw", "/api/tasks/complete", "/api/tasks/verify", "/api/referral/claim"],
+  rateLimit({ windowMs: 60000, max: 20, keyFn: req => `s:${who(req)}:${req.path}` })
+);
 
 async function getUser(id, username="Telegram User") {
   const result = await pool.query(
@@ -167,8 +276,13 @@ async function getUser(id, username="Telegram User") {
 
   return created.rows[0];
 }
-app.get("/health", (req,res) => {
-  res.send("OK");
+app.get("/health", async (req,res) => {
+  try {
+    await pool.query("SELECT 1");
+    res.send("OK");
+  } catch (e) {
+    res.status(503).send("DB DOWN");
+  }
 });
 app.get("/api/user/:id", async (req,res) => {
   try {
@@ -200,17 +314,6 @@ app.post("/api/earn", async (req,res) => {
 
     await getUser(id);
 
-    const cooldown = await pool.query(
-      `SELECT last_ad_reward_at FROM users WHERE id = $1`,
-      [id]
-    );
-    const lastAd = cooldown.rows[0]?.last_ad_reward_at
-      ? new Date(cooldown.rows[0].last_ad_reward_at).getTime()
-      : 0;
-    if (lastAd && Date.now() - lastAd < 20000) {
-      return res.status(429).json({ error: "Please wait before claiming another ad reward." });
-    }
-
     const updated = await pool.query(
       `UPDATE users
        SET daily_earn_count =
@@ -234,21 +337,32 @@ app.post("/api/earn", async (req,res) => {
                THEN 1
                ELSE COALESCE(ad_spin_count, 0) + 1
              END,
-           ad_spin_date = CURRENT_DATE
+           ad_spin_date = CURRENT_DATE,
+           last_ad_reward_at = CURRENT_TIMESTAMP
        WHERE id = $1
          AND (
            daily_earn_date IS NULL
            OR daily_earn_date < CURRENT_DATE
            OR daily_earn_count < 5
          )
+         AND (
+           last_ad_reward_at IS NULL
+           OR last_ad_reward_at < CURRENT_TIMESTAMP - INTERVAL '20 seconds'
+         )
        RETURNING *`,
       [id]
     );
 
     if (updated.rows.length === 0) {
-      return res.status(429).json({
-        error:"Daily earning limit reached"
-      });
+      const chk = await pool.query(
+        `SELECT (last_ad_reward_at IS NOT NULL AND last_ad_reward_at >= CURRENT_TIMESTAMP - INTERVAL '20 seconds') AS cooling
+         FROM users WHERE id = $1`,
+        [id]
+      );
+      if (chk.rows[0]?.cooling) {
+        return res.status(429).json({ error: "Please wait before claiming another ad reward." });
+      }
+      return res.status(429).json({ error: "Daily earning limit reached" });
     }
 
     await pool.query(
@@ -265,7 +379,7 @@ res.json({
   dailyEarnCount:updated.rows[0].daily_earn_count
 });
   } catch(e) {
-    res.status(500).json({error:e.message});
+    console.error(e); res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -275,7 +389,7 @@ app.post("/api/daily", async (req,res) => {
   const client = await pool.connect();
   try {
     const id = String(req.body.id || "");
-    if(!id) { client.release(); return res.status(400).json({error:"Missing user id"}); }
+    if(!id) { return res.status(400).json({error:"Missing user id"}); }
 
     await getUser(id);
 
@@ -294,8 +408,7 @@ app.post("/api/daily", async (req,res) => {
     const prevStreak = userRow.rows[0]?.streak_count || 0;
 
     if (lastDaily === today) {
-      await client.query("ROLLBACK");
-      client.release();
+      await client.query("ROLLBACK").catch(() => {});
       return res.status(409).json({ error:"Daily bonus already claimed today" });
     }
 
@@ -330,8 +443,8 @@ app.post("/api/daily", async (req,res) => {
     });
 
   } catch(e) {
-    await client.query("ROLLBACK");
-    res.status(500).json({error:e.message});
+    await client.query("ROLLBACK").catch(() => {});
+    console.error(e); res.status(500).json({ error: "Internal server error" });
   } finally {
     client.release();
   }
@@ -368,7 +481,7 @@ app.get("/api/referral/:id", async (req,res) => {
       recent: recent.rows
     });
   } catch(e) {
-    res.status(500).json({error:e.message});
+    console.error(e); res.status(500).json({ error: "Internal server error" });
   }
 });
 app.get("/api/activities/:id", async (req,res) => {
@@ -406,7 +519,7 @@ app.get("/api/activities/:id", async (req,res) => {
 
     res.json(result.rows);
   } catch(e) {
-    res.status(500).json({error:e.message});
+    console.error(e); res.status(500).json({ error: "Internal server error" });
   }
 });
 app.post("/api/referral/claim", async (req,res) => {
@@ -427,7 +540,19 @@ app.post("/api/referral/claim", async (req,res) => {
   try {
     await client.query("BEGIN");
 
-    await getUser(referrerId);
+    const refExists = await client.query("SELECT 1 FROM users WHERE id = $1", [referrerId]);
+    if (!refExists.rows.length) {
+      await client.query("ROLLBACK").catch(() => {});
+      return res.status(404).json({ error: "Referrer not found" });
+    }
+    const circular = await client.query(
+      "SELECT 1 FROM referrals WHERE referrer_id = $1 AND referred_id = $2",
+      [referredId, referrerId]
+    );
+    if (circular.rows.length) {
+      await client.query("ROLLBACK").catch(() => {});
+      return res.status(400).json({ error: "Circular referral not allowed" });
+    }
     await getUser(referredId);
 
     await client.query(
@@ -486,8 +611,8 @@ app.post("/api/referral/claim", async (req,res) => {
     });
 
   } catch(e) {
-    await client.query("ROLLBACK");
-    res.status(500).json({error:e.message});
+    await client.query("ROLLBACK").catch(() => {});
+    console.error(e); res.status(500).json({ error: "Internal server error" });
   } finally {
     client.release();
   }
@@ -519,7 +644,7 @@ app.get("/api/tasks/completed/:id", async (req,res) => {
     );
     res.json({ taskIds: result.rows.map(r => r.task_id) });
   } catch(e) {
-    res.status(500).json({ error: e.message });
+    console.error(e); res.status(500).json({ error: "Internal server error" });
   }
 });
 app.post("/api/tasks/verify", async (req,res) => {
@@ -547,16 +672,6 @@ app.post("/api/tasks/verify", async (req,res) => {
     }
 
     const task = taskResult.rows[0];
-
-    if (
-      !["telegram", "social"].includes(
-        String(task.category).toLowerCase()
-      )
-    ) {
-      return res.status(400).json({
-        error: "This task is not a Telegram verification task"
-      });
-    }
 
     if (!task.link) {
       return res.status(400).json({
@@ -669,8 +784,8 @@ app.post("/api/tasks/complete", async (req,res) => {
   ).toLowerCase();
 
   const isTelegramTask =
-    taskLink.includes("t.me/") ||
-    taskLink.includes("telegram.me/");
+    (taskLink.includes("t.me/") || taskLink.includes("telegram.me/")) &&
+    !/(t\.me|telegram\.me)\/(\+|joinchat)/.test(taskLink);
 
   if (
     isTelegramTask &&
@@ -693,7 +808,7 @@ app.post("/api/tasks/complete", async (req,res) => {
     );
 
     if (userResult.rows.length === 0) {
-      await client.query("ROLLBACK");
+      await client.query("ROLLBACK").catch(() => {});
       return res.status(404).json({
         error: "User not found"
       });
@@ -713,7 +828,7 @@ app.post("/api/tasks/complete", async (req,res) => {
     );
 
     if (taskInfoResult.rows.length === 0) {
-      await client.query("ROLLBACK");
+      await client.query("ROLLBACK").catch(() => {});
       return res.status(404).json({
         error: "Task not found or inactive"
       });
@@ -722,55 +837,30 @@ app.post("/api/tasks/complete", async (req,res) => {
     const taskReward = Number(taskInfoResult.rows[0].reward);
     const randomReward = Math.floor(Math.random() * taskReward) + 1;
 
-    // Old completed task: recover missing reward once
+    // Row already exists (e.g. created by Telegram verify): reward only once, then continue
+    // through the normal path so tasks_completed and referral logic also run.
     if (taskResult.rows.length === 0) {
       const existingTask = await client.query(
-        `SELECT * FROM user_tasks
+        `SELECT reward_given FROM user_tasks
          WHERE user_id = $1 AND task_id = $2
          FOR UPDATE`,
         [id, taskId]
       );
 
-      if (existingTask.rows[0]?.reward_given === false) {
-        const recoveredUser = await client.query(
-          `UPDATE users
-           SET balance = balance + $2
-           WHERE id = $1
-           RETURNING *`,
-          [id, randomReward]
-        );
-
-        await client.query(
-          `INSERT INTO activities
-           (user_id, type, amount, description, status, task_id)
-           VALUES ($1, 'task', $2, $3, 'completed', $4)`,
-          [id, randomReward, `Task reward: ${taskId}`, taskId]
-        );
-
-        await client.query(
-          `UPDATE user_tasks
-           SET reward_given = TRUE
-           WHERE user_id = $1 AND task_id = $2`,
-          [id, taskId]
-        );
-
-        await client.query("COMMIT");
-
-        return res.json({
-          ok: true,
-          task_id: taskId,
-          reward: randomReward,
-          balance: recoveredUser.rows[0].balance,
-          recovered: true
+      if (existingTask.rows[0]?.reward_given !== false) {
+        await client.query("ROLLBACK").catch(() => {});
+        return res.status(409).json({
+          error: "Task already completed",
+          duplicate: true
         });
       }
 
-      await client.query("ROLLBACK");
-
-      return res.status(409).json({
-        error: "Task already completed",
-        duplicate: true
-      });
+      await client.query(
+        `UPDATE user_tasks
+         SET reward_given = TRUE, completed_at = CURRENT_TIMESTAMP
+         WHERE user_id = $1 AND task_id = $2`,
+        [id, taskId]
+      );
     }
 
     const updatedUser = await client.query(
@@ -816,6 +906,13 @@ app.post("/api/tasks/complete", async (req,res) => {
           [referral.rows[0].id]
         );
 
+        await client.query(
+          `INSERT INTO activities
+           (user_id, type, amount, description, status, referral_id)
+           VALUES ($1, 'referral', 500, 'Referral reward', 'completed', $2)`,
+          [referral.rows[0].referrer_id, referral.rows[0].id]
+        );
+
         referralReward = true;
       }
     }
@@ -832,7 +929,7 @@ app.post("/api/tasks/complete", async (req,res) => {
     });
 
   } catch (error) {
-    await client.query("ROLLBACK");
+    await client.query("ROLLBACK").catch(() => {});
     console.error(error);
 
     res.status(500).json({
@@ -859,19 +956,21 @@ await pool.query(`
     processed_at TIMESTAMP
   )
 `);  
+await pool.query(`CREATE INDEX IF NOT EXISTS idx_withdrawals_user ON withdrawals(user_id, created_at)`);
 app.post("/api/withdraw", async (req,res) => {
   const client = await pool.connect();
 
   try {
     const id = String(req.body.id || "");
     const method = String(req.body.method || "").toLowerCase();
-    const amount = Number(req.body.amount);
-    const amountCoins = Math.round(amount * 100);
+    const amountRaw = Number(req.body.amount);
+    const amountCoins = Math.round(amountRaw * 100);
+    const amount = amountCoins / 100;
 
-    const accountHolderName = String(req.body.accountHolderName || "");
-    const accountNumber = String(req.body.accountNumber || "");
-    const ifsc = String(req.body.ifsc || "");
-    const upiId = String(req.body.upiId || "");
+    const accountHolderName = String(req.body.accountHolderName || "").trim().slice(0, 100);
+    const accountNumber = String(req.body.accountNumber || "").trim();
+    const ifsc = String(req.body.ifsc || "").trim().toUpperCase();
+    const upiId = String(req.body.upiId || "").trim();
 
     if (!id || !["bank", "upi"].includes(method)) {
       return res.status(400).json({
@@ -899,6 +998,22 @@ app.post("/api/withdraw", async (req,res) => {
           error: "UPI ID is required"
         });
       }
+      if (!/^[\w.\-]{2,256}@[a-zA-Z]{2,64}$/.test(upiId)) {
+        return res.status(400).json({ error: "Invalid UPI ID" });
+      }
+    }
+
+    if (method === "bank") {
+      if (!/^\d{9,18}$/.test(accountNumber)) {
+        return res.status(400).json({ error: "Invalid account number" });
+      }
+      if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) {
+        return res.status(400).json({ error: "Invalid IFSC code" });
+      }
+    }
+
+    if (Math.abs(amountRaw * 100 - amountCoins) > 1e-6) {
+      return res.status(400).json({ error: "Amount can have at most 2 decimal places" });
     }
 
     await client.query("BEGIN");
@@ -909,7 +1024,7 @@ app.post("/api/withdraw", async (req,res) => {
     );
 
     if (userResult.rows.length === 0) {
-      await client.query("ROLLBACK");
+      await client.query("ROLLBACK").catch(() => {});
       return res.status(404).json({
         error: "User not found"
       });
@@ -918,7 +1033,7 @@ app.post("/api/withdraw", async (req,res) => {
     const user = userResult.rows[0];
 
     if (amountCoins > user.balance) {
-      await client.query("ROLLBACK");
+      await client.query("ROLLBACK").catch(() => {});
       return res.status(400).json({
         error: "Insufficient balance"
       });
@@ -934,7 +1049,7 @@ app.post("/api/withdraw", async (req,res) => {
     );
 
     if (countResult.rows[0].count >= 2) {
-      await client.query("ROLLBACK");
+      await client.query("ROLLBACK").catch(() => {});
       return res.status(429).json({
         error: "Daily withdrawal limit reached. Maximum 2 withdrawals per day."
       });
@@ -982,7 +1097,7 @@ await client.query(`
   withdrawal.rows[0].id
 ]);
     await client.query("COMMIT");
-  await masterSend(
+  masterSend(
   process.env.MASTER_ADMIN_ID,
   `🚨 New Withdrawal Request\n\n` +
   `🆔 ID: ${withdrawal.rows[0].id}\n` +
@@ -1001,7 +1116,7 @@ await client.query(`
         ]
   ]
 }
-);
+).catch(err => console.error("ADMIN NOTIFY ERROR:", err));
 
     res.json({
       ok: true,
@@ -1012,7 +1127,7 @@ await client.query(`
     });
 
   } catch (e) {
-    await client.query("ROLLBACK");
+    await client.query("ROLLBACK").catch(() => {});
     console.error(e);
 
     res.status(500).json({
@@ -1048,7 +1163,7 @@ app.get("/api/wallet/:id", async (req, res) => {
       totalWithdrawn: Math.round(Number(withdrawn.rows[0].total) * 100)
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error(e); res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -1132,7 +1247,6 @@ app.post("/api/spin", async (req, res) => {
   try {
     const id = String(req.body.id || "");
     if (!id) {
-      client.release();
       return res.status(400).json({ error: "Missing user id" });
     }
 
@@ -1147,7 +1261,7 @@ app.post("/api/spin", async (req, res) => {
     );
 
     if (!userRow.rows.length) {
-      await client.query("ROLLBACK");
+      await client.query("ROLLBACK").catch(() => {});
       return res.status(404).json({ error: "User not found" });
     }
 
@@ -1174,7 +1288,7 @@ app.post("/api/spin", async (req, res) => {
     }
 
     if (availableSpins <= 0) {
-      await client.query("ROLLBACK");
+      await client.query("ROLLBACK").catch(() => {});
       return res.status(409).json({
         error: "No spins available. Watch a rewarded ad to earn another spin."
       });
@@ -1214,7 +1328,7 @@ app.post("/api/spin", async (req, res) => {
       adSpinsToday: Number(updated.rows[0].ad_spin_count || 0)
     });
   } catch (e) {
-    await client.query("ROLLBACK");
+    await client.query("ROLLBACK").catch(() => {});
     console.error("SPIN ERROR:", e);
     res.status(500).json({ error: "Spin failed" });
   } finally {
@@ -1254,6 +1368,7 @@ app.get("/api/admin/stats", async (req, res) => {
     res.status(500).json({ error: "Failed to load admin stats" });
   }
 });
+app.use(express.static(path.join(process.cwd(), "frontend")));
 app.get("/", (req, res) => {
   res.sendFile("frontend/index.html", { root: process.cwd() });
 });
@@ -1276,7 +1391,8 @@ async function verifyTelegramMembership(userId, chatId) {
         body: JSON.stringify({
           chat_id: chatId,
           user_id: Number(userId)
-        })
+        }),
+        signal: AbortSignal.timeout(15000)
       }
     );
 
@@ -1300,6 +1416,20 @@ async function verifyTelegramMembership(userId, chatId) {
     return false;
   }
 }
+async function notifyUser(userId, text) {
+  try {
+    if (!TELEGRAM_BOT_TOKEN) return;
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: Number(userId), text }),
+      signal: AbortSignal.timeout(10000)
+    });
+  } catch (e) {
+    console.error("NOTIFY USER ERROR:", e.message);
+  }
+}
+
 let masterBotOffset = 0;
 
 async function masterTelegram(method, body = {}) {
@@ -1309,7 +1439,8 @@ async function masterTelegram(method, body = {}) {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(method === "getUpdates" ? 35000 : 15000)
       }
     );
 
@@ -1409,6 +1540,10 @@ async function handleMasterMessage(message) {
     } catch (error) {
       console.error("MASTER STATE LOAD ERROR:", error);
     }
+  }
+
+  if (text === "/start") {
+    try { await clearMasterState(chatId); } catch (error) { console.error("MASTER STATE CLEAR ERROR:", error); }
   }
 
   if (text === "/cancel") {
@@ -2150,6 +2285,7 @@ if (text === "/withdrawals") {
           `👤 User: ${w.user_id}\n` +
           `💰 Amount: ₹${w.amount}`
         );
+        notifyUser(w.user_id, `✅ Your withdrawal of ₹${w.amount} has been approved.`);
         await masterSend(
           "@CoinHammerPayments",
           `🎉 Withdrawal Approved\n\n` +
@@ -2185,7 +2321,7 @@ if (text === "/withdrawals") {
         `, [withdrawalId]);
 
         if (!result.rows.length) {
-          await client.query("ROLLBACK");
+          await client.query("ROLLBACK").catch(() => {});
           await masterSend(
             chatId,
             "❌ Withdrawal not found or already processed."
@@ -2227,6 +2363,7 @@ if (text === "/withdrawals") {
 
         await client.query("COMMIT");
 
+        notifyUser(w.user_id, `❌ Your withdrawal of ₹${w.amount} was rejected. ${refundCoins} coins were refunded.`);
         await masterSend(
           chatId,
           `❌ Withdrawal Rejected\n\n` +
@@ -2237,7 +2374,7 @@ if (text === "/withdrawals") {
         );
 
       } catch (error) {
-        await client.query("ROLLBACK");
+        await client.query("ROLLBACK").catch(() => {});
         console.error("REJECT WITHDRAWAL ERROR:", error);
         await masterSend(chatId, "❌ Failed to reject withdrawal.");
       } finally {
@@ -2248,11 +2385,12 @@ if (text === "/withdrawals") {
     }
   await masterSend(
     chatId,
-    "❓ Unknown command.\\n\\nUse /stats"
+    "❓ Unknown command.\n\nUse /start to open the menu."
   );
 }
 
 async function masterBotLoop() {
+  if (globalThis.__shuttingDown) return;
   try {
     await dbReady;
   } catch (error) {
@@ -2275,6 +2413,7 @@ async function masterBotLoop() {
 
     if (!result.ok) {
       console.error("MASTER BOT getUpdates FAILED:", result.error_code, result.description);
+      if (result.error_code === 409) await new Promise(r => setTimeout(r, 5000)); // another instance is polling
     }
 
     if (result.ok && result.result) {
@@ -2292,8 +2431,13 @@ async function masterBotLoop() {
         }
                 if (update.callback_query) {
           const callback = update.callback_query;
-          const callbackChatId = String(callback.message.chat.id);
+          const callbackChatId = String(callback.message?.chat?.id || "");
           const data = callback.data || "";
+          try {
+          if (!callbackChatId || String(callback.from?.id) !== MASTER_ADMIN_ID) {
+            await masterTelegram("answerCallbackQuery", { callback_query_id: callback.id, text: "Unauthorized" });
+            continue;
+          }
 
           if (data.startsWith("approve_")) {
             const withdrawalId = data.split("_")[1];
@@ -2488,7 +2632,7 @@ if (data.startsWith("admin_edit_task_")) {
     );
   }
 
-  return;
+  continue;
 }
 
           if (data.startsWith("admin_delete_task_")) {
@@ -2637,6 +2781,36 @@ if (data.startsWith("admin_edit_task_")) {
             text: "Add Task form opened"
           });
                           }
+
+          // Task detail view (button in the Tasks list)
+          if (data.startsWith("admin_task_")) {
+            const taskId = data.replace("admin_task_", "");
+            const r = await pool.query(
+              `SELECT id, title, description, reward, category, icon, link, active FROM tasks WHERE id = $1`,
+              [taskId]
+            );
+            if (!r.rows.length) {
+              await masterSend(callbackChatId, "❌ Task not found.");
+            } else {
+              const t = r.rows[0];
+              await masterSend(
+                callbackChatId,
+                `${t.icon || "🎯"} ${t.title}\n\n🆔 ${t.id}\n📝 ${t.description || "-"}\n💰 Max Reward: ${t.reward}\n📂 ${t.category}\n🔗 ${t.link || "None"}\n⚡ ${t.active ? "Active" : "Inactive"}`,
+                { inline_keyboard: [[
+                  { text: "✏️ Edit", callback_data: `admin_edit_task_${t.id}` },
+                  { text: "🗑️ Delete", callback_data: `admin_delete_task_${t.id}` }
+                ]] }
+              );
+            }
+            await masterTelegram("answerCallbackQuery", { callback_query_id: callback.id });
+          }
+          } catch (cbError) {
+            console.error("MASTER CALLBACK ERROR:", data, cbError);
+            try {
+              await masterSend(callbackChatId, "❌ Something went wrong. Please try again.");
+              await masterTelegram("answerCallbackQuery", { callback_query_id: callback.id, text: "Error" });
+            } catch {}
+          }
                 }
       }
     }
@@ -2648,7 +2822,23 @@ if (data.startsWith("admin_edit_task_")) {
 }
 
 // ================= END MASTER ADMIN BOT =================
-app.listen(process.env.PORT || 3000, () => {
+const server = app.listen(process.env.PORT || 3000, () => {
   console.log(`CoinHammer backend running on port ${process.env.PORT || 3000}`);
+  if (!REQUIRE_TG_AUTH) console.warn("WARNING: REQUIRE_TG_AUTH is not enabled - API calls without Telegram initData are accepted.");
 });
 masterBotLoop();
+
+process.on("unhandledRejection", err => console.error("UNHANDLED REJECTION:", err));
+process.on("uncaughtException", err => console.error("UNCAUGHT EXCEPTION:", err));
+
+async function shutdown(signal) {
+  if (globalThis.__shuttingDown) return;
+  globalThis.__shuttingDown = true;
+  console.log(`${signal} received, shutting down...`);
+  server.close();
+  setTimeout(() => process.exit(0), 8000).unref();
+  try { await pool.end(); } catch {}
+  process.exit(0);
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
