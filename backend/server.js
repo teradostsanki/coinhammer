@@ -151,7 +151,17 @@ await pool.query(`
 const app = express();
 const dbReady = initDb().catch(err => { console.error("Database init error:", err); throw err; });
 app.set("trust proxy", 1);
-app.use(cors());
+app.disable("x-powered-by");
+app.use((req, res, next) => {
+  res.set({
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Strict-Transport-Security": "max-age=15552000"
+  });
+  next();
+});
+// Optional: CORS_ORIGIN=https://your-domain.com (comma separated). Unset = allow all.
+app.use(cors(process.env.CORS_ORIGIN ? { origin: process.env.CORS_ORIGIN.split(",").map(x => x.trim()) } : undefined));
 app.use(express.json({ limit: "50kb" }));
 
 // Every async route is wrapped: a thrown error becomes a clean 500, never a crash/hang.
@@ -177,8 +187,8 @@ for (const method of ["get", "post"]) {
 // ---- Telegram Mini App authentication (initData HMAC) ----
 // Frontend must send header:  x-telegram-init-data: <Telegram.WebApp.initData>
 // REQUIRE_TG_AUTH=true  -> header mandatory. Otherwise header is optional but, if sent, must be valid.
-const REQUIRE_TG_AUTH = String(process.env.REQUIRE_TG_AUTH || "").toLowerCase() === "true";
-const AUTH_EXEMPT = new Set(["/api/admin/stats", "/api/leaderboard", "/api/tasks"]);
+const REQUIRE_TG_AUTH = String(process.env.REQUIRE_TG_AUTH ?? "true").toLowerCase() !== "false"; // secure by default
+const AUTH_EXEMPT = new Set(["/api/admin/stats", "/api/leaderboard", "/api/tasks", "/api/config"]);
 
 function validateInitData(initData, botToken, maxAgeSec = 86400) {
   try {
@@ -255,9 +265,10 @@ setInterval(() => {
 const who = req => req.tgUserId || req.ip;
 app.use("/api", rateLimit({ windowMs: 60000, max: 300, keyFn: req => `g:${who(req)}` }));
 app.use(
-  ["/api/earn", "/api/spin", "/api/daily", "/api/withdraw", "/api/tasks/complete", "/api/tasks/verify", "/api/referral/claim"],
+  ["/api/ads/start", "/api/spin", "/api/daily", "/api/withdraw", "/api/tasks/complete", "/api/tasks/verify", "/api/tasks/start", "/api/referral/claim"],
   rateLimit({ windowMs: 60000, max: 20, keyFn: req => `s:${who(req)}:${req.path}` })
 );
+app.use("/api/ads/claim", rateLimit({ windowMs: 60000, max: 60, keyFn: req => `c:${who(req)}` }));
 
 async function getUser(id, username="Telegram User") {
   const result = await pool.query(
@@ -307,81 +318,186 @@ app.get("/api/user/:id", async (req,res) => {
   }
 });
 
-app.post("/api/earn", async (req,res) => {
+// ================= ADSGRAM: SERVER-VERIFIED REWARDED ADS =================
+// Flow:  /api/ads/start -> (client shows ad) -> /api/ads/claim
+//  * S2S mode (ADSGRAM_REWARD_SECRET set): reward only after AdsGram's server calls /adsgram/reward.
+//  * Client mode (no secret): reward needs a valid one-time session + minimum watch time.
+const ADSGRAM_BLOCK_ID = process.env.ADSGRAM_BLOCK_ID || "51020";
+const ADSGRAM_REWARD_SECRET = process.env.ADSGRAM_REWARD_SECRET || "";
+const ADSGRAM_S2S = ADSGRAM_REWARD_SECRET.length >= 16;
+const AD_REWARD = 100;
+const AD_DAILY_LIMIT = 5;
+const AD_COOLDOWN_SEC = 20;
+const AD_MIN_WATCH_SEC = 8;
+const AD_SESSION_TTL_MIN = 10;
+
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS ad_sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    postback_at TIMESTAMP,
+    consumed BOOLEAN DEFAULT FALSE
+  )
+`);
+await pool.query(`CREATE INDEX IF NOT EXISTS idx_ad_sessions_user ON ad_sessions(user_id, created_at DESC)`);
+setInterval(() => {
+  pool.query(`DELETE FROM ad_sessions WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '2 days'`).catch(() => {});
+}, 3600000).unref();
+
+app.get("/api/config", (req,res) => {
+  res.json({
+    adsgramBlockId: ADSGRAM_BLOCK_ID,
+    adMode: ADSGRAM_S2S ? "s2s" : "client",
+    adDailyLimit: AD_DAILY_LIMIT
+  });
+});
+
+// Old clients called this directly (unsafe) - retired.
+app.post("/api/earn", (req,res) => {
+  res.status(410).json({ error: "App updated. Please close and reopen CoinHammer from Telegram." });
+});
+
+app.post("/api/ads/start", async (req,res) => {
+  const id = String(req.body.id || "");
+  if (!id) return res.status(400).json({ error: "Missing user id" });
+  await getUser(id);
+
+  const st = await pool.query(
+    `SELECT
+       (daily_earn_date = CURRENT_DATE AND daily_earn_count >= $2) AS maxed,
+       (last_ad_reward_at IS NOT NULL
+         AND last_ad_reward_at >= CURRENT_TIMESTAMP - ($3 * INTERVAL '1 second')) AS cooling
+     FROM users WHERE id = $1`,
+    [id, AD_DAILY_LIMIT, AD_COOLDOWN_SEC]
+  );
+  if (st.rows[0]?.maxed) return res.status(429).json({ error: "Daily ad limit reached. Come back tomorrow!" });
+  if (st.rows[0]?.cooling) return res.status(429).json({ error: "Please wait a few seconds before the next ad." });
+
+  await pool.query(`UPDATE ad_sessions SET consumed = TRUE WHERE user_id = $1 AND consumed = FALSE`, [id]);
+  const sessionId = crypto.randomBytes(16).toString("hex");
+  await pool.query(`INSERT INTO ad_sessions (id, user_id) VALUES ($1, $2)`, [sessionId, id]);
+  res.json({ ok: true, sessionId, mode: ADSGRAM_S2S ? "s2s" : "client" });
+});
+
+// AdsGram -> our server (server-to-server). Set as the block's Reward URL:
+//   https://YOUR-DOMAIN/adsgram/reward?userid=[userId]&token=YOUR_SECRET
+app.get("/adsgram/reward", async (req,res) => {
+  if (!ADSGRAM_S2S) return res.status(404).send("Not enabled");
+  const userId = String(req.query.userid || req.query.userId || "");
+  const token = Buffer.from(String(req.query.token || ""));
+  const secret = Buffer.from(ADSGRAM_REWARD_SECRET);
+  if (token.length !== secret.length || !crypto.timingSafeEqual(token, secret)) {
+    return res.status(403).send("Forbidden");
+  }
+  if (!/^\d{1,20}$/.test(userId)) return res.status(400).send("Bad user");
+
+  const r = await pool.query(
+    `UPDATE ad_sessions SET postback_at = CURRENT_TIMESTAMP
+     WHERE id = (
+       SELECT id FROM ad_sessions
+       WHERE user_id = $1 AND consumed = FALSE AND postback_at IS NULL
+         AND created_at > CURRENT_TIMESTAMP - ($2 * INTERVAL '1 minute')
+       ORDER BY created_at DESC LIMIT 1
+     )
+     RETURNING id`,
+    [userId, AD_SESSION_TTL_MIN]
+  );
+  if (!r.rowCount) console.warn("ADSGRAM postback without open session for user", userId);
+  res.status(200).send("OK");
+});
+
+app.post("/api/ads/claim", async (req,res) => {
+  const id = String(req.body.id || "");
+  const sessionId = String(req.body.sessionId || "");
+  if (!id || !/^[a-f0-9]{32}$/.test(sessionId)) {
+    return res.status(400).json({ error: "Invalid request" });
+  }
+
+  const client = await pool.connect();
   try {
-    const id = String(req.body.id || "");
-    if (!id) return res.status(400).json({error:"Missing user id"});
+    await client.query("BEGIN");
 
-    await getUser(id);
+    const s = await client.query(
+      `SELECT consumed, postback_at,
+              EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - created_at)) AS secs
+       FROM ad_sessions WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+      [sessionId, id]
+    );
+    const row = s.rows[0];
+    if (!row || row.consumed) {
+      await client.query("ROLLBACK").catch(() => {});
+      return res.status(400).json({ error: "Ad session invalid or already used" });
+    }
 
-    const updated = await pool.query(
+    const secs = Number(row.secs);
+    if (secs > AD_SESSION_TTL_MIN * 60) {
+      await client.query(`UPDATE ad_sessions SET consumed = TRUE WHERE id = $1`, [sessionId]);
+      await client.query("COMMIT");
+      return res.status(410).json({ error: "Ad session expired. Please watch again." });
+    }
+
+    if (ADSGRAM_S2S) {
+      if (!row.postback_at) {
+        await client.query("ROLLBACK").catch(() => {});
+        return res.status(202).json({ pending: true });
+      }
+    } else if (secs < AD_MIN_WATCH_SEC) {
+      await client.query("ROLLBACK").catch(() => {});
+      return res.status(429).json({ error: "Ad was not watched completely." });
+    }
+
+    const updated = await client.query(
       `UPDATE users
        SET daily_earn_count =
-             CASE
-               WHEN daily_earn_date IS NULL OR daily_earn_date < CURRENT_DATE
-               THEN 1
-               ELSE daily_earn_count + 1
-             END,
+             CASE WHEN daily_earn_date IS NULL OR daily_earn_date < CURRENT_DATE
+                  THEN 1 ELSE daily_earn_count + 1 END,
            daily_earn_date = CURRENT_DATE,
-           balance = balance + 100,
+           balance = balance + ${AD_REWARD},
            spin_credits =
-             CASE
-               WHEN spin_credit_date IS NULL OR spin_credit_date < CURRENT_DATE
-               THEN 2
-               ELSE COALESCE(spin_credits, 0) + 1
-             END,
+             CASE WHEN spin_credit_date IS NULL OR spin_credit_date < CURRENT_DATE
+                  THEN 2 ELSE COALESCE(spin_credits, 0) + 1 END,
            spin_credit_date = CURRENT_DATE,
            ad_spin_count =
-             CASE
-               WHEN ad_spin_date IS NULL OR ad_spin_date < CURRENT_DATE
-               THEN 1
-               ELSE COALESCE(ad_spin_count, 0) + 1
-             END,
+             CASE WHEN ad_spin_date IS NULL OR ad_spin_date < CURRENT_DATE
+                  THEN 1 ELSE COALESCE(ad_spin_count, 0) + 1 END,
            ad_spin_date = CURRENT_DATE,
            last_ad_reward_at = CURRENT_TIMESTAMP
        WHERE id = $1
-         AND (
-           daily_earn_date IS NULL
-           OR daily_earn_date < CURRENT_DATE
-           OR daily_earn_count < 5
-         )
-         AND (
-           last_ad_reward_at IS NULL
-           OR last_ad_reward_at < CURRENT_TIMESTAMP - INTERVAL '20 seconds'
-         )
-       RETURNING *`,
+         AND (daily_earn_date IS NULL OR daily_earn_date < CURRENT_DATE OR daily_earn_count < ${AD_DAILY_LIMIT})
+         AND (last_ad_reward_at IS NULL
+              OR last_ad_reward_at < CURRENT_TIMESTAMP - INTERVAL '${AD_COOLDOWN_SEC} seconds')
+       RETURNING balance, daily_earn_count`,
       [id]
     );
 
-    if (updated.rows.length === 0) {
-      const chk = await pool.query(
-        `SELECT (last_ad_reward_at IS NOT NULL AND last_ad_reward_at >= CURRENT_TIMESTAMP - INTERVAL '20 seconds') AS cooling
-         FROM users WHERE id = $1`,
-        [id]
-      );
-      if (chk.rows[0]?.cooling) {
-        return res.status(429).json({ error: "Please wait before claiming another ad reward." });
-      }
-      return res.status(429).json({ error: "Daily earning limit reached" });
+    if (!updated.rows.length) {
+      await client.query("ROLLBACK").catch(() => {});
+      return res.status(429).json({ error: "Ad limit reached or too fast. Please try again shortly." });
     }
 
-    await pool.query(
-  `INSERT INTO activities
-   (user_id, type, amount, description, status)
-   VALUES ($1, $2, $3, $4, $5)`,
-  [id, "ad", 100, "Rewarded ad earning", "completed"]
-);
+    await client.query(`UPDATE ad_sessions SET consumed = TRUE WHERE id = $1`, [sessionId]);
+    await client.query(
+      `INSERT INTO activities (user_id, type, amount, description, status)
+       VALUES ($1, 'ad', $2, 'Rewarded ad earning', 'completed')`,
+      [id, AD_REWARD]
+    );
+    await client.query("COMMIT");
 
-res.json({
-  ok:true,
-  reward:100,
-  balance:updated.rows[0].balance,
-  dailyEarnCount:updated.rows[0].daily_earn_count
-});
-  } catch(e) {
-    console.error(e); res.status(500).json({ error: "Internal server error" });
+    res.json({
+      ok: true,
+      reward: AD_REWARD,
+      balance: updated.rows[0].balance,
+      dailyEarnCount: updated.rows[0].daily_earn_count
+    });
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
   }
 });
+
 
 const STREAK_REWARDS = [100, 150, 200, 250, 300, 400, 500];
 
@@ -746,6 +862,24 @@ app.post("/api/tasks/verify", async (req,res) => {
     });
   }
 });
+// Anti-cheat: a task with a link must be "started" and left open for a few seconds before it can be claimed.
+const TASK_MIN_SECONDS = 10;
+const taskStarts = new Map();
+setInterval(() => {
+  const cutoff = Date.now() - 3600000;
+  for (const [k, t] of taskStarts) if (t < cutoff) taskStarts.delete(k);
+}, 600000).unref();
+
+app.post("/api/tasks/start", async (req,res) => {
+  const id = String(req.body.id || "");
+  const taskId = String(req.body.taskId || "");
+  if (!id || !taskId) return res.status(400).json({ error: "Missing user id or task id" });
+  const t = await pool.query("SELECT 1 FROM tasks WHERE id = $1 AND active = TRUE", [taskId]);
+  if (!t.rows.length) return res.status(404).json({ error: "Task not found or inactive" });
+  taskStarts.set(`${id}:${taskId}`, Date.now());
+  res.json({ ok: true, waitSeconds: TASK_MIN_SECONDS });
+});
+
 app.post("/api/tasks/complete", async (req,res) => {
   const id = String(req.body.id || "");
   const taskId = String(req.body.taskId || "");
@@ -795,6 +929,20 @@ app.post("/api/tasks/complete", async (req,res) => {
       error: "Please verify Telegram task before claiming reward",
       verified: false
     });
+  }
+
+  if (!isTelegramTask && taskLink) {
+    const startedAt = taskStarts.get(`${id}:${taskId}`);
+    if (!startedAt) {
+      return res.status(400).json({ error: "Please open the task first", needStart: true });
+    }
+    const waited = (Date.now() - startedAt) / 1000;
+    if (waited < TASK_MIN_SECONDS) {
+      return res.status(429).json({
+        error: `Please complete the task first (wait ${Math.ceil(TASK_MIN_SECONDS - waited)}s)`,
+        wait: Math.ceil(TASK_MIN_SECONDS - waited)
+      });
+    }
   }
 
   const client = await pool.connect();
@@ -2824,7 +2972,8 @@ if (data.startsWith("admin_edit_task_")) {
 // ================= END MASTER ADMIN BOT =================
 const server = app.listen(process.env.PORT || 3000, () => {
   console.log(`CoinHammer backend running on port ${process.env.PORT || 3000}`);
-  if (!REQUIRE_TG_AUTH) console.warn("WARNING: REQUIRE_TG_AUTH is not enabled - API calls without Telegram initData are accepted.");
+  if (!REQUIRE_TG_AUTH) console.warn("WARNING: REQUIRE_TG_AUTH=false - API calls without Telegram login are accepted.");
+  console.log(`AdsGram mode: ${ADSGRAM_S2S ? "S2S (server-verified)" : "client (session + min watch time)"}`);
 });
 masterBotLoop();
 
