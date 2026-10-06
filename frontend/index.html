@@ -141,6 +141,9 @@ a{color:inherit;}
 .btn-back{margin-top:16px;width:100%;min-height:44px;border-radius:13px;border:1px solid var(--line);background:transparent;color:var(--text-dim);font-weight:700;}
 .btn-outline{width:100%;min-height:46px;border-radius:14px;border:1.5px solid var(--line);background:var(--bg3);color:var(--text);font-weight:700;font-size:13.5px;display:flex;align-items:center;justify-content:center;gap:8px;}
 .btn-outline.active{border-color:var(--gold-2);background:rgba(245,166,35,.1);color:var(--gold-1);}
+.spin-ad-btn{width:100%;min-height:46px;margin-top:10px;border-radius:14px;border:1px solid rgba(92,200,255,.28);background:linear-gradient(135deg,rgba(92,200,255,.18),rgba(33,150,243,.12));color:var(--blue-1);font-weight:800;display:flex;align-items:center;justify-content:center;gap:8px;}
+.spin-ad-btn:disabled{opacity:.45;cursor:not-allowed;}
+.spin-ad-result{min-height:20px;margin-top:8px;text-align:center;color:var(--text-dim);font-size:12.5px;}
 
 /* TASKS PAGE */
 .task-row{margin-top:10px;padding:14px;border-radius:16px;background:var(--bg3);border:1px solid var(--line-soft);display:flex;align-items:center;gap:12px;}
@@ -246,7 +249,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold-2);outline
   </button>
   <button class="action-card blue" id="watchAds" onclick="watchAdAndEarn()">
     <div class="ac-icon">▶️</div>
-    <div class="ac-text"><div class="ac-title">Watch Ads</div><div class="ac-sub">Watch 30 sec ads</div></div>
+    <div class="ac-text"><div class="ac-title">Watch Ads</div><div class="ac-sub">Watch rewarded ads</div></div>
     <div class="ac-arrow">›</div>
   </button>
   <button class="action-card purple" onclick="goTasks()">
@@ -301,14 +304,6 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold-2);outline
 <script>
 const tg=window.Telegram?.WebApp;
 function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
-const _fetch=window.fetch.bind(window);
-window.fetch=(url,opts={})=>{
-  if(tg?.initData && String(url).startsWith(api)){
-    opts={...opts,headers:{...(opts.headers||{}),"x-telegram-init-data":tg.initData}};
-  }
-  return _fetch(url,opts);
-};
-
 function hideAllSections(){
   document.querySelectorAll("main > section, main > .action-grid").forEach(el=>{
     el.style.display="none";
@@ -377,7 +372,7 @@ async function goTasks(){
   `;
 
   try{
-    const r=await fetch(api+"/api/tasks");
+    const r=await apiFetch(api+"/api/tasks");
     const j=await r.json();
     allTasks=j.tasks||[];
     taskFilter="all";
@@ -401,7 +396,7 @@ function filterTasks(cat){
 async function renderTasks(){
   let doneIds=[];
   try{
-    const r=await fetch(api+"/api/tasks/completed/"+encodeURIComponent(id));
+    const r=await apiFetch(api+"/api/tasks/completed/"+encodeURIComponent(id));
     const j=await r.json();
     doneIds=j.taskIds||[];
   }catch(e){}
@@ -464,28 +459,49 @@ async function goSpin(){
       <div class="wheel-hub">⚡</div>
     </div>
     <button class="earn" id="spinBtn" type="button" onclick="doSpin()">🎰 SPIN NOW</button>
+    <button class="spin-ad-btn" id="spinAdBtn" type="button" onclick="watchAdAndEarn('spin')">📺 WATCH AD <span>+1 SPIN</span></button>
+    <div class="spin-ad-result" id="spinAdResult"></div>
     <div class="notice" id="spinResult"></div>
     <button class="btn-back" type="button" onclick="goHome()">← Back to Home</button>
   `;
 
-  try{
-    const r=await fetch(api+"/api/spin/status/"+encodeURIComponent(id));
-    const j=await r.json();
-    $("spinCount").textContent=j.availableSpins||0;
-    if(!j.canSpin){
-      $("spinBtn").disabled=true;
-      $("spinResult").textContent="⏳ No spins available. Watch a rewarded ad to earn another spin.";
-    }
-  }catch(e){}
+  await refreshSpinStatus();
 
   setActiveNav("spin");
   window.scrollTo({top:0,behavior:"smooth"});
 }
 
+async function refreshSpinStatus(){
+  try{
+    const r=await apiFetch(api+"/api/spin/status/"+encodeURIComponent(id));
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.error||"Failed to load spin status");
+    if($("spinCount")) $("spinCount").textContent=Number(j.availableSpins||0);
+    if($("spinBtn")) $("spinBtn").disabled=!j.canSpin;
+    if($("spinAdBtn")){
+      const remaining=Math.max(0,Number(j.adSpinsRemaining||0));
+      $("spinAdBtn").disabled=remaining<=0;
+      $("spinAdBtn").innerHTML=remaining>0 ? `📺 WATCH AD <span>+1 SPIN</span>` : `📺 AD LIMIT REACHED`;
+    }
+    if($("spinAdResult")){
+      const remaining=Math.max(0,Number(j.adSpinsRemaining||0));
+      $("spinAdResult").textContent=`Ad spins left today: ${remaining}/5`;
+    }
+    if(!j.canSpin && Number(j.adSpinsRemaining||0)<=0 && $("spinResult")){
+      $("spinResult").textContent="⏳ No spins left today.";
+    }else if(!j.canSpin && $("spinResult")){
+      $("spinResult").textContent="Watch an ad to get +1 spin.";
+    }
+  }catch(e){
+    if($("spinResult")) $("spinResult").textContent="⚠️ Unable to load spin status.";
+  }
+}
+
 async function doSpin(){
   const btn=$("spinBtn");
+  if(!btn || btn.disabled) return;
   btn.disabled=true;
-  $("spinResult").textContent="Spinning...";
+  if($("spinResult")) $("spinResult").textContent="Spinning...";
 
   try{
     const j=await post("/api/spin",{id});
@@ -500,18 +516,11 @@ async function doSpin(){
       balance=j.balance;
       render();
       loadActivities();
-      if(!$("spinResult")) return;
-      $("spinResult").textContent=j.reward===0 ? "😔 Better Luck Next Time!" : "🎉 You won "+j.reward+" coins!";
-      try{
-        const sr=await fetch(api+"/api/spin/status/"+encodeURIComponent(id));
-        const s2=await sr.json();
-        if($("spinCount")) $("spinCount").textContent=s2.availableSpins||0;
-        if(s2.canSpin && $("spinBtn")) $("spinBtn").disabled=false;
-        else if($("spinResult")) $("spinResult").textContent+=" ⏳ No spins left — watch an ad for another one.";
-      }catch(e){}
+      if($("spinResult")) $("spinResult").textContent=j.reward===0 ? "😔 Better Luck Next Time!" : "🎉 You won "+j.reward+" coins!";
+      await refreshSpinStatus();
     },4000);
   }catch(e){
-    $("spinResult").textContent="❌ "+e.message;
+    if($("spinResult")) $("spinResult").textContent="❌ "+e.message;
     btn.disabled=false;
   }
 }
@@ -549,7 +558,7 @@ async function goReferrals(){
   `;
 
   try{
-    const r=await fetch(api+"/api/referral/"+encodeURIComponent(id));
+    const r=await apiFetch(api+"/api/referral/"+encodeURIComponent(id));
     const j=await r.json();
     if(j.error) throw new Error(j.error);
 
@@ -611,7 +620,7 @@ async function goWallet(tab){
   `;
 
   try{
-    const r=await fetch(api+"/api/wallet/"+encodeURIComponent(id));
+    const r=await apiFetch(api+"/api/wallet/"+encodeURIComponent(id));
     const j=await r.json();
     $("wBalance").textContent=(j.balance||0).toLocaleString("en-IN");
     $("wEarned").textContent=(j.totalEarned||0).toLocaleString("en-IN");
@@ -757,7 +766,7 @@ async function submitWithdrawalPage(method,data){
 async function renderTransactionsTab(){
   $("walletTabContent").innerHTML=`<div id="historyList" class="muted" style="margin-top:12px;">Loading...</div>`;
   try{
-    const r=await fetch(api+"/api/activities/"+encodeURIComponent(id));
+    const r=await apiFetch(api+"/api/activities/"+encodeURIComponent(id));
     historyItems=await r.json();
     renderHistoryInto("historyList", historyItems);
   }catch(e){
@@ -836,7 +845,7 @@ async function goLeaderboard(){
     <button class="btn-back" type="button" onclick="goMore()">← Back</button>
   `;
   try{
-    const list=await (await fetch(api+"/api/leaderboard")).json();
+    const list=await (await apiFetch(api+"/api/leaderboard")).json();
     $("leaderboardList").innerHTML = list.length ? list.map((u,i)=>`
       <div class="activity-row">
         <div class="activity-icon">${i<3?"🏅":(i+1)}</div>
@@ -853,10 +862,15 @@ async function goLeaderboard(){
 /* ---------- GLOBAL STATE / INIT ---------- */
 if(tg){tg.ready();tg.expand();}
 const api="https://coinhammer.onrender.com";
+function apiFetch(url, options={}){
+  const headers={...(options.headers||{})};
+  if(tg?.initData) headers["x-telegram-init-data"]=tg.initData;
+  return fetch(url,{...options,headers});
+}
 let AdController=null;
 async function initAds(){
   try{
-    const r=await fetch(api+"/api/config");
+    const r=await apiFetch(api+"/api/config");
     const c=await r.json();
     if(window.Adsgram && c.adsgramBlockId) AdController=window.Adsgram.init({blockId:String(c.adsgramBlockId)});
   }catch(e){ console.log("AdsGram init skipped",e); }
@@ -864,6 +878,24 @@ async function initAds(){
 const IS_LOCAL=["localhost","127.0.0.1"].includes(location.hostname);
 const tgUser=tg?.initDataUnsafe?.user;
 const id=String(tgUser?.id||(IS_LOCAL?"6182160586":""));
+function indiaDateString(date=new Date()){
+  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Kolkata",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(date);
+  const out={};
+  for(const p of parts) if(p.type!=="literal") out[p.type]=p.value;
+  return `${out.year}-${out.month}-${out.day}`;
+}
+function shiftDateString(dateString,days){
+  const d=new Date(`${dateString}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate()+days);
+  return d.toISOString().slice(0,10);
+}
+function nextIndiaMidnightMs(){
+  const now=new Date();
+  const today=indiaDateString(now);
+  let target=new Date(`${today}T18:30:00Z`);
+  if(target<=now) target=new Date(target.getTime()+86400000);
+  return target.getTime();
+}
 const name=tgUser?.username||tgUser?.first_name||"DemoUser";
 const startParam=tg?.initDataUnsafe?.start_param||"";
 const $=x=>document.getElementById(x);
@@ -871,16 +903,16 @@ let balance=0,dailyEarnCount=0,dailyEarnDate="",displayedBalance=0,tasksComplete
 
 async function load(){
   try{
-    const r=await fetch(api+"/api/user/"+encodeURIComponent(id));
+    const r=await apiFetch(api+"/api/user/"+encodeURIComponent(id));
     const u=await r.json();
     if(!r.ok) throw new Error(u.error||"Failed to load");
     balance=u.balance||0;
     dailyEarnDate=u.daily_earn_date||"";
-    const todayUtc=new Date().toISOString().slice(0,10);
+    const todayUtc=indiaDateString();
     dailyEarnCount=(dailyEarnDate && String(dailyEarnDate).slice(0,10)===todayUtc)?(u.daily_earn_count||0):0;
     tasksCompleted=u.tasks_completed||0;
     streakCount=u.streak_count||0;
-    lastDaily=u.last_daily ? new Date(u.last_daily).toISOString().slice(0,10) : "";
+    lastDaily=u.last_daily ? String(u.last_daily).slice(0,10) : "";
     render();
     renderStreak();
   }catch(e){
@@ -904,9 +936,9 @@ function render(){
 const STREAK_REWARDS=[100,150,200,250,300,400,500];
 function renderStreak(){
   if(!$("streakDays")) return;
-  const today=new Date().toISOString().slice(0,10);
+  const today=indiaDateString();
   const claimedToday = lastDaily===today;
-  const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
+  const yesterday=shiftDateString(today,-1);
   const sc=(lastDaily===today||lastDaily===yesterday)?streakCount:0;
   const currentDay = claimedToday ? (((sc-1)%7+7)%7)+1 : (sc%7)+1;
 
@@ -918,9 +950,7 @@ function renderStreak(){
     return `<div class="streak-day ${cls}"><div class="sd-label">Day ${dayNum} ${cls==='done'?'✓':''}</div><div class="sd-reward">+${rw}</div></div>`;
   }).join("");
 
-  const now=new Date();
-  const midnight=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()+1));
-  const diff=midnight-now;
+  const diff=nextIndiaMidnightMs()-Date.now();
   const h=String(Math.floor(diff/3600000)).padStart(2,"0");
   const m=String(Math.floor((diff%3600000)/60000)).padStart(2,"0");
   const s=String(Math.floor((diff%60000)/1000)).padStart(2,"0");
@@ -929,7 +959,7 @@ function renderStreak(){
 setInterval(renderStreak,1000);
 
 async function post(path,body){
-  const r=await fetch(api+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  const r=await apiFetch(api+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   let j={};
   try{ j=await r.json(); }catch(e){}
   if(r.status===401) throw new Error("Session expired. Please close and reopen the app from Telegram.");
@@ -981,7 +1011,7 @@ function renderHistoryInto(targetId, items){
 
 async function loadActivities(){
   try{
-    const r=await fetch(api+"/api/activities/"+encodeURIComponent(id));
+    const r=await apiFetch(api+"/api/activities/"+encodeURIComponent(id));
     historyItems=await r.json();
     filterHistory(currentActivityFilter);
   }catch(e){
@@ -1016,7 +1046,7 @@ async function claimDaily(){
     const j=await post("/api/daily",{id});
     balance=j.balance;
     streakCount=j.streak;
-    lastDaily=new Date().toISOString().slice(0,10);
+    lastDaily=indiaDateString();
     render();
     renderStreak();
     $("notice").textContent="🎉 +"+j.reward+" daily bonus (Day "+j.streak+")";
@@ -1030,9 +1060,9 @@ async function claimDaily(){
 
 let adBusy=false, pendingAdSession=null;
 
-async function claimAdReward(sessionId, tries=10){
+async function claimAdReward(sessionId, tries=20){
   for(let i=0;i<tries;i++){
-    const r=await fetch(api+"/api/ads/claim",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,sessionId})});
+    const r=await apiFetch(api+"/api/ads/claim",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,sessionId})});
     let j={}; try{ j=await r.json(); }catch(e){}
     if(r.status===202 && j.pending){ await new Promise(res=>setTimeout(res,1500)); continue; }
     if(r.status===401) throw new Error("Session expired. Please close and reopen the app from Telegram.");
@@ -1040,54 +1070,63 @@ async function claimAdReward(sessionId, tries=10){
     pendingAdSession=null;
     return j;
   }
-  const err=new Error("Reward is being confirmed. Tap Watch Ad again in a moment to collect it.");
+  const err=new Error("Reward is still being confirmed. Please wait a moment and try again.");
   err.pending=true;
   throw err;
 }
 
-function applyAdReward(j){
+async function applyAdReward(j,source="home"){
   balance=j.balance;
   dailyEarnCount=j.dailyEarnCount;
   render();
-  $("timer").textContent="+"+j.reward+" coins • +1 Spin";
+  if(source==="spin"){
+    if($("spinAdResult")) $("spinAdResult").textContent="🎉 +"+j.reward+" coins • +1 Spin";
+    await refreshSpinStatus();
+  }else{
+    $("timer").textContent="+"+j.reward+" coins • +1 Spin";
+  }
   loadActivities();
 }
 
-async function watchAdAndEarn(){
+async function watchAdAndEarn(source="home"){
   if(adBusy) return;
   adBusy=true;
-  $("earn").disabled=true;
-  $("watchAds").style.opacity=".6";
+  const statusEl=source==="spin" ? $("spinAdResult") : $("timer");
+  const sourceBtn=source==="spin" ? $("spinAdBtn") : $("watchAds");
+  const startBtn=$("earn");
+  if(startBtn) startBtn.disabled=true;
+  if(sourceBtn) sourceBtn.disabled=true;
+  if($("watchAds")) $("watchAds").style.opacity=".6";
   try{
-    // A previous reward that was still being confirmed?
     if(pendingAdSession){
-      try{ applyAdReward(await claimAdReward(pendingAdSession,4)); return; }
+      try{ await applyAdReward(await claimAdReward(pendingAdSession,6),source); return; }
       catch(e){ if(e.pending) throw e; }
     }
-    if(!AdController){ $("timer").textContent="Ads are not available right now"; return; }
+    if(!AdController){ if(statusEl) statusEl.textContent="Ads are not available right now"; return; }
 
-    $("timer").textContent="Preparing ad...";
+    if(statusEl) statusEl.textContent="Preparing ad...";
     const s=await post("/api/ads/start",{id});
-    $("timer").textContent="Opening rewarded ad...";
+    if(statusEl) statusEl.textContent="Opening rewarded ad...";
 
     let result;
     try{ result=await AdController.show(); }
-    catch(err){ $("timer").textContent="Ad not completed — no reward"; return; }
-    if(!result?.done){ $("timer").textContent="Ad not completed — no reward"; return; }
+    catch(err){ if(statusEl) statusEl.textContent="Ad not completed — no reward"; return; }
+    if(!result?.done){ if(statusEl) statusEl.textContent="Ad not completed — no reward"; return; }
 
-    $("timer").textContent="Verifying reward...";
+    if(statusEl) statusEl.textContent="Verifying reward...";
     pendingAdSession=s.sessionId;
-    applyAdReward(await claimAdReward(s.sessionId));
+    await applyAdReward(await claimAdReward(s.sessionId),source);
   }catch(e){
-    $("timer").textContent="";
-    toast("⚠️ "+(e?.message||e?.description||"Ad not available right now"));
+    if(statusEl) statusEl.textContent="⚠️ "+(e?.message||e?.description||"Ad not available right now");
   }finally{
     adBusy=false;
-    $("earn").disabled=false;
-    $("watchAds").style.opacity="1";
+    if(startBtn) startBtn.disabled=false;
+    if($("watchAds")) $("watchAds").style.opacity="1";
+    if(sourceBtn && source==="home") sourceBtn.disabled=false;
+    if(source==="spin") await refreshSpinStatus();
   }
 }
-$("earn").onclick=watchAdAndEarn;
+$("earn").onclick=()=>watchAdAndEarn("home");
 
 const startedTasks={};
 const TASK_WAIT_MS=10000;
