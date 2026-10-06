@@ -865,7 +865,7 @@ const api="https://coinhammer.onrender.com";
 function apiFetch(url, options={}){
   const headers={...(options.headers||{})};
   if(tg?.initData) headers["x-telegram-init-data"]=tg.initData;
-  return fetch(url,{...options,headers});
+  return apiFetch(url,{...options,headers});
 }
 let AdController=null;
 async function initAds(){
