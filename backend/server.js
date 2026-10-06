@@ -10,12 +10,28 @@ dotenv.config();
 import { Pool } from "pg";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+
+const INDIA_TZ = "Asia/Kolkata";
+function indiaDateString(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: INDIA_TZ, year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(date);
+  const out = {};
+  for (const part of parts) if (part.type !== "literal") out[part.type] = part.value;
+  return `${out.year}-${out.month}-${out.day}`;
+}
+function shiftDateString(dateString, days) {
+  const d = new Date(`${dateString}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
 const initDb = async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   username TEXT,
-  balance INTEGER DEFAULT 1250,
+  balance INTEGER DEFAULT 0,
   last_daily DATE,
   tasks_completed INTEGER DEFAULT 0
 );
@@ -322,13 +338,13 @@ app.get("/api/user/:id", async (req,res) => {
 // Flow:  /api/ads/start -> (client shows ad) -> /api/ads/claim
 //  * S2S mode (ADSGRAM_REWARD_SECRET set): reward only after AdsGram's server calls /adsgram/reward.
 //  * Client mode (no secret): reward needs a valid one-time session + minimum watch time.
-const ADSGRAM_BLOCK_ID = process.env.ADSGRAM_BLOCK_ID || "51020";
+const ADSGRAM_BLOCK_ID = String(process.env.ADSGRAM_BLOCK_ID || "").trim();
 const ADSGRAM_REWARD_SECRET = process.env.ADSGRAM_REWARD_SECRET || "";
 const ADSGRAM_S2S = ADSGRAM_REWARD_SECRET.length >= 16;
 const AD_REWARD = 100;
 const AD_DAILY_LIMIT = 5;
 const AD_COOLDOWN_SEC = 20;
-const AD_MIN_WATCH_SEC = 8;
+const AD_MIN_WATCH_SEC = 30;
 const AD_SESSION_TTL_MIN = 10;
 
 await pool.query(`
@@ -365,7 +381,7 @@ app.post("/api/ads/start", async (req,res) => {
 
   const st = await pool.query(
     `SELECT
-       (daily_earn_date = CURRENT_DATE AND daily_earn_count >= $2) AS maxed,
+       (daily_earn_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date AND daily_earn_count >= $2) AS maxed,
        (last_ad_reward_at IS NOT NULL
          AND last_ad_reward_at >= CURRENT_TIMESTAMP - ($3 * INTERVAL '1 second')) AS cooling
      FROM users WHERE id = $1`,
@@ -450,21 +466,21 @@ app.post("/api/ads/claim", async (req,res) => {
     const updated = await client.query(
       `UPDATE users
        SET daily_earn_count =
-             CASE WHEN daily_earn_date IS NULL OR daily_earn_date < CURRENT_DATE
+             CASE WHEN daily_earn_date IS NULL OR daily_earn_date < (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
                   THEN 1 ELSE daily_earn_count + 1 END,
-           daily_earn_date = CURRENT_DATE,
+           daily_earn_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date,
            balance = balance + ${AD_REWARD},
            spin_credits =
-             CASE WHEN spin_credit_date IS NULL OR spin_credit_date < CURRENT_DATE
+             CASE WHEN spin_credit_date IS NULL OR spin_credit_date < (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
                   THEN 2 ELSE COALESCE(spin_credits, 0) + 1 END,
-           spin_credit_date = CURRENT_DATE,
+           spin_credit_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date,
            ad_spin_count =
-             CASE WHEN ad_spin_date IS NULL OR ad_spin_date < CURRENT_DATE
+             CASE WHEN ad_spin_date IS NULL OR ad_spin_date < (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
                   THEN 1 ELSE COALESCE(ad_spin_count, 0) + 1 END,
-           ad_spin_date = CURRENT_DATE,
+           ad_spin_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date,
            last_ad_reward_at = CURRENT_TIMESTAMP
        WHERE id = $1
-         AND (daily_earn_date IS NULL OR daily_earn_date < CURRENT_DATE OR daily_earn_count < ${AD_DAILY_LIMIT})
+         AND (daily_earn_date IS NULL OR daily_earn_date < (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date OR daily_earn_count < ${AD_DAILY_LIMIT})
          AND (last_ad_reward_at IS NULL
               OR last_ad_reward_at < CURRENT_TIMESTAMP - INTERVAL '${AD_COOLDOWN_SEC} seconds')
        RETURNING balance, daily_earn_count`,
@@ -509,7 +525,7 @@ app.post("/api/daily", async (req,res) => {
 
     await getUser(id);
 
-    const today = new Date().toISOString().slice(0,10);
+    const today = indiaDateString();
 
     await client.query("BEGIN");
 
@@ -519,7 +535,7 @@ app.post("/api/daily", async (req,res) => {
     );
 
     const lastDaily = userRow.rows[0]?.last_daily
-      ? new Date(userRow.rows[0].last_daily).toISOString().slice(0,10)
+      ? indiaDateString(userRow.rows[0].last_daily)
       : null;
     const prevStreak = userRow.rows[0]?.streak_count || 0;
 
@@ -1353,15 +1369,15 @@ async function ensureDailySpinCredits(id) {
   const result = await pool.query(
     `UPDATE users
      SET spin_credits = CASE
-           WHEN spin_credit_date IS NULL OR spin_credit_date < CURRENT_DATE THEN 1
+           WHEN spin_credit_date IS NULL OR spin_credit_date < (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date THEN 1
            ELSE COALESCE(spin_credits, 0)
          END,
-         spin_credit_date = CURRENT_DATE,
+         spin_credit_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date,
          ad_spin_count = CASE
-           WHEN ad_spin_date IS NULL OR ad_spin_date < CURRENT_DATE THEN 0
+           WHEN ad_spin_date IS NULL OR ad_spin_date < (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date THEN 0
            ELSE COALESCE(ad_spin_count, 0)
          END,
-         ad_spin_date = CURRENT_DATE
+         ad_spin_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
      WHERE id = $1
      RETURNING spin_credits, ad_spin_count`,
     [id]
@@ -1414,9 +1430,9 @@ app.post("/api/spin", async (req, res) => {
     }
 
     const user = userRow.rows[0];
-    const today = new Date().toISOString().slice(0, 10);
+    const today = indiaDateString();
     const creditDate = user.spin_credit_date
-      ? new Date(user.spin_credit_date).toISOString().slice(0, 10)
+      ? indiaDateString(user.spin_credit_date)
       : null;
 
     let availableSpins = Number(user.spin_credits || 0);
