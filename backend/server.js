@@ -297,9 +297,15 @@ async function getUser(id, username="Telegram User") {
   }
 
   const created = await pool.query(
-    "INSERT INTO users (id, username, balance) VALUES ($1, $2, 1250) RETURNING *",
+    "INSERT INTO users (id, username, balance) VALUES ($1, $2, 500) RETURNING *",
     [id, username]
   );
+
+  await pool.query(
+    `INSERT INTO activities (user_id, type, amount, description, status)
+     VALUES ($1, 'bonus', 500, 'Welcome bonus', 'completed')`,
+    [id]
+  ).catch(() => {});
 
   return created.rows[0];
 }
@@ -1046,6 +1052,23 @@ app.post("/api/tasks/complete", async (req,res) => {
     const user = updatedUser.rows[0];
     let referralReward = false;
 
+    let milestoneBonus = 0;
+    if (user.tasks_completed > 0 && user.tasks_completed % 20 === 0) {
+      milestoneBonus = 500;
+
+      const milestoneUpdate = await client.query(
+        `UPDATE users SET balance = balance + 500 WHERE id = $1 RETURNING balance`,
+        [id]
+      );
+      user.balance = milestoneUpdate.rows[0].balance;
+
+      await client.query(
+        `INSERT INTO activities (user_id, type, amount, description, status)
+         VALUES ($1, 'bonus', 500, $2, 'completed')`,
+        [id, `Milestone bonus: ${user.tasks_completed} tasks completed`]
+      );
+    }
+
     if (user.tasks_completed >= 10) {
       const referral = await client.query(
         `SELECT * FROM referrals
@@ -1088,6 +1111,7 @@ app.post("/api/tasks/complete", async (req,res) => {
       task_id: taskId,
       tasks_completed: user.tasks_completed,
       reward: randomReward,
+      milestone_bonus: milestoneBonus,
       balance: user.balance,
       referral_reward: referralReward
     });
