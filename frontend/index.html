@@ -865,7 +865,7 @@ const api="https://coinhammer.onrender.com";
 function apiFetch(url, options={}){
   const headers={...(options.headers||{})};
   if(tg?.initData) headers["x-telegram-init-data"]=tg.initData;
-  return apiFetch(url,{...options,headers});
+  return fetch(url,{...options,headers});
 }
 let AdController=null;
 async function initAds(){
@@ -1177,8 +1177,13 @@ async function completeTask(taskId){
       setTimeout(()=>$("notice").textContent="",3000);
       return;
     }
-    $("notice").textContent="Task completed! +"+(j.reward||0)+" COIN";
-    setTimeout(()=>$("notice").textContent="",3000);
+    if(j.milestone_bonus>0){
+      $("notice").textContent="🎉 Task completed! +"+(j.reward||0)+" COIN — plus +"+j.milestone_bonus+" milestone bonus for "+j.tasks_completed+" tasks!";
+      setTimeout(()=>$("notice").textContent="",5000);
+    }else{
+      $("notice").textContent="Task completed! +"+(j.reward||0)+" COIN";
+      setTimeout(()=>$("notice").textContent="",3000);
+    }
     tasksCompleted=j.tasks_completed||tasksCompleted;
     delete startedTasks[taskId];
     await load();
